@@ -217,8 +217,10 @@ def _ncc(fixed: np.ndarray, moving: np.ndarray) -> float:
     """Normalised cross-correlation between two RGB images converted to grey."""
     fg = color.rgb2gray(fixed).astype(np.float64)
     mg = color.rgb2gray(moving).astype(np.float64)
-    fg -= fg.mean(); fg_std = fg.std()
-    mg -= mg.mean(); mg_std = mg.std()
+    fg -= fg.mean()
+    fg_std = fg.std()
+    mg -= mg.mean()
+    mg_std = mg.std()
     if fg_std < 1e-10 or mg_std < 1e-10:
         return 0.0
     return float(np.mean((fg / fg_std) * (mg / mg_std)))
@@ -1247,6 +1249,9 @@ def plot_results(
     print(f"Plots saved to: {output_dir}")
 
 
+_BAR_GROUP_OFFSET = 0.4   # centres the group of bars around each tick
+
+
 def _bar_chart(
     labels: List[str],
     series: Dict[str, List[float]],
@@ -1268,7 +1273,7 @@ def _bar_chart(
             fill_nan if np.isnan(v) else v
             for v in vals
         ]
-        bars = ax.bar(x + i * width - 0.4 + width / 2, vals_clean, width, label=name)
+        bars = ax.bar(x + i * width - _BAR_GROUP_OFFSET + width / 2, vals_clean, width, label=name)
 
     ax.set_title(title, fontsize=13)
     ax.set_ylabel(ylabel)
