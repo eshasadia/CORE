@@ -133,6 +133,17 @@ class Trimorph:
         all_dice = []
         all_transform = []
 
+        # Downsample masks for the exhaustive rotation search to reduce warp cost (~16× faster)
+        SEARCH_SCALE = 4
+        small_fixed_mask = cv2.resize(fixed_mask,
+                                       (fixed_mask.shape[1] // SEARCH_SCALE,
+                                        fixed_mask.shape[0] // SEARCH_SCALE),
+                                       interpolation=cv2.INTER_NEAREST)
+        small_moving_mask = cv2.resize(moving_mask,
+                                        (moving_mask.shape[1] // SEARCH_SCALE,
+                                         moving_mask.shape[0] // SEARCH_SCALE),
+                                        interpolation=cv2.INTER_NEAREST)
+
         for angle in np.arange(0, 360, rotation_step).tolist():
             theta = np.radians(angle)
             c, s = np.cos(theta), np.sin(theta)
@@ -144,12 +155,16 @@ class Trimorph:
 
             transform = origin_transform_com @ rotation_matrix @ origin_transform_com_ @ com_transform
 
+            # Scale translation part for the downsampled search masks
+            search_transform = transform.copy()
+            search_transform[0:2, 2] /= SEARCH_SCALE
+
             warped_moving_mask = cv2.warpAffine(
-                moving_mask,
-                transform[0:-1][:],
-                fixed_img.shape[:2][::-1],
+                small_moving_mask,
+                search_transform[0:-1][:],
+                small_fixed_mask.shape[:2][::-1],
             )
-            dice_com = dice(fixed_mask, warped_moving_mask)
+            dice_com = dice(small_fixed_mask, warped_moving_mask)
 
             all_dice.append(dice_com)
             all_transform.append(transform)
@@ -271,6 +286,34 @@ cv2.destroyAllWindows()
 
 
 
+def _compute_ngf_cached(fixed_img, moving_img, fixed_grad_cache, epsilon=0.01):
+    """
+    Compute NGF metric re-using cached fixed-image gradients to avoid redundant np.gradient calls.
+    """
+    from skimage import color as _color
+    if 'fixed_gray' not in fixed_grad_cache:
+        fixed_gray = _color.rgb2gray(fixed_img)
+        fx, fy = np.gradient(fixed_gray)
+        fixed_mag = np.sqrt(fx**2 + fy**2) + epsilon
+        fixed_grad_cache['fixed_gray'] = fixed_gray
+        fixed_grad_cache['fx_norm'] = fx / fixed_mag
+        fixed_grad_cache['fy_norm'] = fy / fixed_mag
+
+    fx_norm = fixed_grad_cache['fx_norm']
+    fy_norm = fixed_grad_cache['fy_norm']
+
+    moving_gray = _color.rgb2gray(moving_img)
+    mx, my = np.gradient(moving_gray)
+    moving_mag = np.sqrt(mx**2 + my**2) + epsilon
+    mx_norm = mx / moving_mag
+    my_norm = my / moving_mag
+
+    dot_product = fx_norm * mx_norm + fy_norm * my_norm
+    ngf = float(np.mean(dot_product**2))
+    print("NGF metric:", ngf)
+    return ngf
+
+
 def rigid_registration(moving_img, fixed_img, moving_mask, fixed_mask, verbose=False):
     """
     Aligns a moving image to a fixed image using Trimorph and optionally XFeatReg if needed.
@@ -288,13 +331,16 @@ def rigid_registration(moving_img, fixed_img, moving_mask, fixed_mask, verbose=F
         ngf_metrics (dict): Dictionary with NGF metrics before and after optional second registration.
     """
     ngf_metrics = {}
+    # Cache fixed-image gradients to avoid recomputing them for every NGF call
+    _grad_cache = {}
+
     # Initial registration with Trimorph
     aligner = Trimorph()
     best_transform1, moving_img_transformed, moving_mask_transformed, max_dice = aligner.prealignment(
         fixed_img, moving_img, fixed_mask, moving_mask
     )
     # Evaluate NGF metric
-    ngf_initial = ngf_metric(fixed_img, moving_img_transformed)
+    ngf_initial = _compute_ngf_cached(fixed_img, moving_img_transformed, _grad_cache)
     ngf_metrics['NGF trimoph'] = ngf_initial
     # If no transformation was found (identity), do extra registration
     if np.array_equal(best_transform1, np.eye(3)):
@@ -303,35 +349,23 @@ def rigid_registration(moving_img, fixed_img, moving_mask, fixed_mask, verbose=F
         aligner = XFeatReg()
         best_transform1, moving_img_transformed = aligner.register(fixed_img, moving_img)
         best_transform1 = np.vstack((best_transform1, [0, 0, 1]))
-        ngf_metrics['NGF XFeat'] = ngf_metric(fixed_img, moving_img_transformed)
+        ngf_metrics['NGF XFeat'] = _compute_ngf_cached(fixed_img, moving_img_transformed, _grad_cache)
         final_transform = best_transform1
     else:
-        # Optionally perform another registration step with XFeatReg
+        # Run XFeatReg once on the already-transformed image (avoids a second full registration)
         aligner = XFeatReg()
-
-        # Register using already transformed image
         M1, aligned_image = aligner.register(fixed_img, moving_img_transformed)
-        ngf_second = ngf_metric(fixed_img, aligned_image)
+        ngf_second = _compute_ngf_cached(fixed_img, aligned_image, _grad_cache)
         ngf_metrics['NGF XFeat transformed'] = ngf_second
 
-        # Register directly from original moving image
-        M2, third_aligned_image = aligner.register(fixed_img, moving_img)
-        ngf_third = ngf_metric(fixed_img, third_aligned_image)
-        ngf_metrics['NGF XFeat'] = ngf_third
-
-        # Ensure M1 and M2 are 3x3 transformation matrices (homogeneous coordinates)
         M1_hom = np.vstack([M1, [0, 0, 1]]) if M1.shape == (2, 3) else M1
-        M2_hom = np.vstack([M2, [0, 0, 1]]) if M2.shape == (2, 3) else M2
 
-        # Choose the best transformation based on NGF metrics
-        if ngf_initial >= ngf_second and ngf_initial >= ngf_third:
+        # Choose the better result: Trimorph alone vs. Trimorph + XFeat
+        if ngf_initial >= ngf_second:
             final_transform = best_transform1
-        elif ngf_second >= ngf_third:
+        else:
             final_transform = best_transform1 @ M1_hom
             moving_img_transformed = aligned_image
-        else:
-            final_transform = M2_hom
-            moving_img_transformed = third_aligned_image
 
         return moving_img_transformed, final_transform, ngf_metrics
 

@@ -7,6 +7,7 @@ import os
 import cv2
 import numpy as np
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor
 from skimage.filters import threshold_local
 from skimage.morphology import h_maxima, h_minima
 from skimage.segmentation import watershed
@@ -138,24 +139,35 @@ def process_moving_patch(patch_extractor, tfm, patch_idx):
     return nuclei_data
 
 
+def _process_patch_pair(args):
+    """Process a single (fixed, moving) patch pair; used by the thread pool."""
+    fixed_patch_extractor, tfm, patch_idx = args
+    fixed_nuclei, moving_nuclei = [], []
+    try:
+        fixed_nuclei = process_fixed_patch(fixed_patch_extractor, patch_idx)
+        moving_nuclei = process_moving_patch(fixed_patch_extractor, tfm, patch_idx)
+    except Exception as e:
+        print(f"Error processing patch {patch_idx}: {e}")
+    return fixed_nuclei, moving_nuclei
+
+
 def process_nuclei_in_patches(fixed_patch_extractor, tfm, start_index=0, end_index=None):
     if end_index is None:
         end_index = len(fixed_patch_extractor) - 1
-    
+
+    patch_indices = list(range(start_index, end_index + 1))
+    args_list = [(fixed_patch_extractor, tfm, idx) for idx in patch_indices]
+
     all_fixed_nuclei_data = []
     all_moving_nuclei_data = []
-    
-    for idx, patch_idx in enumerate(range(start_index, end_index + 1)):
-        try:
-            fixed_nuclei = process_fixed_patch(fixed_patch_extractor, patch_idx)
+
+    # Use ThreadPoolExecutor: I/O-bound WSI reads benefit from threads without pickling overhead
+    max_workers = min(os.cpu_count() or 1, len(patch_indices))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for fixed_nuclei, moving_nuclei in executor.map(_process_patch_pair, args_list):
             all_fixed_nuclei_data.extend(fixed_nuclei)
-            
-            moving_nuclei = process_moving_patch(fixed_patch_extractor, tfm, patch_idx)
             all_moving_nuclei_data.extend(moving_nuclei)
-            
-        except Exception as e:
-            print(f"Error processing patch {patch_idx}: {e}")
-    
+
     return all_fixed_nuclei_data, all_moving_nuclei_data
 
 
