@@ -9,8 +9,9 @@ Demonstrates the full coarse-to-fine WSI registration pipeline:
   4. Coarse rigid registration (XFeat-based).
   5. Coarse non-rigid / elastic registration.
   6. Save the combined deformation field as an MHA file.
-  7. (Optional) Fine nuclei-level shape-aware registration.
-  8. Visualise results with matplotlib overlays.
+  7. Apply the deformation field to the whole WSI and save as OME-TIFF.
+  8. (Optional) Fine nuclei-level shape-aware registration.
+  9. Visualise results with matplotlib overlays.
 
 Before running
 --------------
@@ -55,6 +56,7 @@ from core.preprocessing.padding import pad_images
 from core.registration.registration import perform_rigid_registration
 from core.registration.nonrigid import elastic_image_registration
 import core.utils.util as util
+from apply_deformation_wsi import apply_deformation_to_wsi
 
 
 # ── User configuration ──────────────────────────────────────────────────────
@@ -63,6 +65,20 @@ TARGET_WSI_PATH = "/path/to/target.tiff"   # fixed slide
 
 # Output path for the combined deformation field (MHA format).
 DEFORMATION_OUTPUT_PATH = "./deformation_field.mha"
+
+# Output path for the registered whole-slide image (OME-TIFF format).
+WSI_OUTPUT_PATH = "./registered_slide.ome.tiff"
+
+# Magnification at which the deformation field was computed (matches
+# PREPROCESSING_RESOLUTION used during registration).
+SOURCE_MAGNIFICATION = 0.625
+
+# Magnification of the full-resolution WSI (e.g. 20.0 or 40.0).
+TARGET_MAGNIFICATION = 40.0
+
+# OME-TIFF tile size and compression for the registered output.
+WSI_TILE_SIZE   = 512
+WSI_COMPRESSION = "lzw"   # 'lzw' | 'deflate' | 'jpeg' | 'none'
 
 # Set to True to run the optional fine nuclei-level registration step.
 RUN_FINE_REGISTRATION = False
@@ -160,6 +176,28 @@ def save_deformation_field(source_prep, final_transform, displacement_field, out
     return sitk_image
 
 
+def apply_wsi_deformation(mha_path, wsi_path, output_path):
+    """
+    Apply the saved deformation field to the full-resolution WSI and write
+    the result as a pyramidal OME-TIFF.
+
+    This step scales the low-magnification displacement field to the WSI's
+    native resolution entirely inside pyvips, so the whole slide is never
+    fully loaded into RAM.
+    """
+    print("\n── Step 7 · Applying deformation to whole WSI ───────────────")
+    apply_deformation_to_wsi(
+        mha_path=mha_path,
+        wsi_path=wsi_path,
+        output_path=output_path,
+        source_magnification=SOURCE_MAGNIFICATION,
+        target_magnification=TARGET_MAGNIFICATION,
+        tile_size=WSI_TILE_SIZE,
+        compression=WSI_COMPRESSION,
+    )
+    print(f"  Registered WSI saved to: {output_path} ✓")
+
+
 def fine_registration(source_prep, target_prep, final_transform, displacement_field, padding_params):
     """
     Optional nuclei-level shape-aware fine registration.
@@ -171,7 +209,7 @@ def fine_registration(source_prep, target_prep, final_transform, displacement_fi
     from core.registration.nonrigid import compute_deformation_and_apply
     from core.preprocessing.padding import pad_landmarks
 
-    print("\n── Step 7 · Fine nuclei-level registration ──────────────────")
+    print("\n── Step 8 · Fine nuclei-level registration ──────────────────")
     moving_df = load_nuclei_coordinates(MOVING_NUCLEI_CSV)
     fixed_df  = load_nuclei_coordinates(FIXED_NUCLEI_CSV)
     print(f"  Fixed nuclei : {len(fixed_df)}   Moving nuclei : {len(moving_df)}")
@@ -241,7 +279,10 @@ def main():
         source_prep, final_transform, displacement_field, DEFORMATION_OUTPUT_PATH
     )
 
-    # ── 7 (optional): Fine registration ──────────────────────────────────
+    # ── 7: Apply deformation to whole WSI and save OME-TIFF ───────────────
+    apply_wsi_deformation(DEFORMATION_OUTPUT_PATH, SOURCE_WSI_PATH, WSI_OUTPUT_PATH)
+
+    # ── 8 (optional): Fine registration ──────────────────────────────────
     if RUN_FINE_REGISTRATION:
         fine_registration(
             source_prep, target_prep,
@@ -249,7 +290,7 @@ def main():
             padding_params,
         )
 
-    # ── 8: Final visualisation ────────────────────────────────────────────
+    # ── 9: Final visualisation ────────────────────────────────────────────
     warped_np = warped_source.detach().cpu().numpy()
     if warped_np.ndim == 4:
         warped_np = warped_np[0, 0]          # (1,1,H,W) → (H,W)
@@ -259,6 +300,7 @@ def main():
 
     print("\n✅ CORE registration pipeline complete.")
     print(f"   Deformation field : {DEFORMATION_OUTPUT_PATH}")
+    print(f"   Registered WSI    : {WSI_OUTPUT_PATH}")
     print(
         "\nTo visualise deformation in TIAViz, run:\n"
         "  tiatoolbox visualize --slides <slides-folder> --overlays <overlays-folder>\n"
