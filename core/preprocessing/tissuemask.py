@@ -1,4 +1,5 @@
 
+import logging
 import numpy as np
 import torch
 import shutil
@@ -6,7 +7,6 @@ import cv2
 import os
 from skimage import morphology, measure
 from scipy import ndimage
-# import vision_agent
 
 from vision_agent.tools import florence2_sam2_instance_segmentation
 from tiatoolbox.models.engine.semantic_segmentor import SemanticSegmentor
@@ -15,23 +15,33 @@ from pillow_heif import register_heif_opener
 import core.preprocessing.stainnorm as stainnorm
 register_heif_opener()
 
+logger = logging.getLogger(__name__)
 
 
 class FlorenceTissueMaskExtractor:
-    def __init__(self):
+    def __init__(self, unet_model_path: str = "", unet_device: str = "cuda"):
         # Define default and fallback prompts
         self.default_prompt = "tissue,stain"
         self.backup_prompts = ["tissue,stain", "tissue", "cell,tissue", "histology"]
+        self.unet_model_path = unet_model_path
+        self.unet_device = unet_device
 
     def extract(self, image: np.ndarray, artefacts: bool) -> np.ndarray:
         """
         Extracts the tissue mask from an image using instance segmentation or fallback methods.
 
+        Extraction order:
+          1. Florence-2 + SAM2 prompt-based instance segmentation.
+          2. If that fails and a UNet model path is provided, the UNet extractor.
+          3. Final fallback: Otsu threshold with morphological cleanup.
+
         Args:
             image (np.ndarray): Input RGB image.
+            artefacts (bool): When True, return only the first (largest) segment mask
+                so that control tissue artefacts are isolated.
 
         Returns:
-            np.ndarray: Binary tissue mask.
+            np.ndarray: Binary tissue mask (uint8, values 0 or 255).
         """
         # Try instance segmentation first
         segments = self._segment_with_prompts(image, self.default_prompt)
@@ -45,19 +55,23 @@ class FlorenceTissueMaskExtractor:
                     stain = stainnorm.StainNormalizer()
                     norm, h, e = stain.process(image)
                     segments = self._segment_with_prompts(norm, prompt)
+
         if artefacts:
             if segments:
                 return (segments[0]['mask'] * 255).astype(np.uint8)
-            # No segments found for artefact extraction — fall through to fallback
+            # No segments found for artefact extraction — fall through to UNet / fallback
         else:
             if segments:
                 combined_mask = np.zeros_like(segments[0]['mask'], dtype=np.uint8)
                 for segment in segments:
                     combined_mask = np.maximum(combined_mask, (segment['mask'] * 255).astype(np.uint8))
-
                 return combined_mask
 
-        # Fallback to unet method
+        # Try UNet-based extraction if a model path has been provided
+        if self.unet_model_path:
+            return self._unet_mask(image)
+
+        # Final fallback
         return self._fallback_mask(image)
 
     @staticmethod
@@ -68,16 +82,22 @@ class FlorenceTissueMaskExtractor:
             return []
 
     def _unet_mask(self, image: np.ndarray) -> np.ndarray:
-        extractor = UNetTissueMaskExtractor(model_path="", device="cuda")
-        mask = extractor.extract_masks(image)
-        
-        if mask is not None:
-            return mask
-        else:
-            return self._fallback_mask(image)
+        """Extract tissue mask using the UNet model, falling back to Otsu on error."""
+        try:
+            extractor = UNetTissueMaskExtractor(
+                model_path=self.unet_model_path,
+                device=self.unet_device,
+            )
+            mask = extractor.extract_masks(image)
+            if mask is not None:
+                return mask
+        except Exception as exc:
+            logger.warning("UNet tissue mask extraction failed: %s", exc)
+        return self._fallback_mask(image)
+
     def _fallback_mask(self, image: np.ndarray) -> np.ndarray:
         """Fallback method using Otsu threshold and morphology."""
-        print("Applying fallback tissue mask extraction.")
+        logger.info("Applying fallback tissue mask extraction.")
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         _, threshold_mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
@@ -99,52 +119,6 @@ class FlorenceTissueMaskExtractor:
         largest_component_mask = (labels == largest_label).astype(np.uint8)
 
         return largest_component_mask
-
-    def extract_tissue_mask(self,image):
-            """
-            Extracts the tissue mask from an image.
-            
-            Args:
-                image (numpy.ndarray): Input image.
-
-            Returns:
-                numpy.ndarray: Binary mask of the extracted tissue.
-            """
-            # Use instance segmentation to extract tissue mask
-            segments = florence2_sam2_instance_segmentation("tissue,stain", image)
-
-            if len(segments) == 0:
-                backup_prompts = ["tissue,stain", "tissue", "cell,tissue", "histology"]
-                for prompt in backup_prompts:
-                    segments = florence2_sam2_instance_segmentation(prompt, image)
-                    if len(segments) > 0:
-                        break
-
-            if len(segments) > 0:
-                return (segments[0]['mask'] * 255).astype(np.uint8)
-
-            # Fallback: use Otsu's thresholding
-            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-            _, threshold_mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            mask = threshold_mask
-            # Find connected components
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-            mask_binary = (mask > 0).astype(np.uint8)
-            mask_binary = 1 - mask_binary
-            # Find the largest connected component
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_binary, connectivity=8)
-            areas = stats[1:, cv2.CC_STAT_AREA]
-            largest_component_label = np.argmax(areas) + 1
-            largest_component_mask = (labels == largest_component_label).astype(np.uint8)
-            return largest_component_mask
-
-"""
-extractor =  FlorenceTissueMaskExtractor()
-tissue_mask = extractor.extract(image)
-
-"""
 class UNetTissueMaskExtractor:
     def __init__(self, model_path: str, device: str = "cuda"):
         """
@@ -194,18 +168,15 @@ class UNetTissueMaskExtractor:
         model.load_state_dict(pretrained)
         return model
 
-    def extract_masks(self, image: np.ndarray ) -> tuple[np.ndarray]:
+    def extract_masks(self, image: np.ndarray) -> np.ndarray:
         """
-        Generate tissue masks for fixed and moving images using UNet segmentation.
+        Generate a tissue mask for a single image using UNet segmentation.
 
         Args:
-            fixed_image (np.ndarray): Grayscale fixed image.
-            moving_image (np.ndarray): Grayscale moving image.
+            image (np.ndarray): Input RGB image.
 
         Returns:
-            tuple:
-                - fixed_mask (np.ndarray): Processed binary tissue mask for the fixed image.
-                - moving_mask (np.ndarray): Processed binary tissue mask for the moving image.
+            np.ndarray: Processed binary tissue mask.
         """
         global_save_dir = "./tmp/"
         save_dir = os.path.join(global_save_dir, 'tissue_mask')
@@ -248,13 +219,3 @@ class UNetTissueMaskExtractor:
         mask = self.post_processing_mask(mask)
 
         return mask
-"""
-Example
-extractor = UNetTissueMaskExtractor(
-    model_path="",
-    device="cuda"
-)
-
-fixed_mask, moving_mask = extractor.extract_masks(fixed_image, moving_image)
-"""
-

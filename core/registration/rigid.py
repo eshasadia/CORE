@@ -225,7 +225,7 @@ class XFeatReg:
         corners_img1 = np.array([[0, 0], [w-1, 0], [w-1, h-1], [0, h-1]], dtype=np.float32).reshape(-1, 1, 2)
 
         if H is None:
-            print("Homography computation failed. Using identity matrix.")
+            logger.warning("Homography computation failed. Using identity matrix.")
             H = np.eye(3, dtype=np.float32)
             mask = np.zeros((len(ref_points), 1), dtype=np.uint8)
         else:
@@ -310,7 +310,7 @@ def _compute_ngf_cached(fixed_img, moving_img, fixed_grad_cache, epsilon=0.01):
 
     dot_product = fx_norm * mx_norm + fy_norm * my_norm
     ngf = float(np.mean(dot_product**2))
-    print("NGF metric:", ngf)
+    logger.debug("NGF metric: %f", ngf)
     return ngf
 
 
@@ -345,7 +345,7 @@ def rigid_registration(moving_img, fixed_img, moving_mask, fixed_mask, verbose=F
     # If no transformation was found (identity), do extra registration
     if np.array_equal(best_transform1, np.eye(3)):
         if verbose:
-            print("Running extra registration with XFeatReg...")
+        logger.info("Running extra registration with XFeatReg...")
         aligner = XFeatReg()
         best_transform1, moving_img_transformed = aligner.register(fixed_img, moving_img)
         best_transform1 = np.vstack((best_transform1, [0, 0, 1]))
