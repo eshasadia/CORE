@@ -4,6 +4,15 @@ Quick Start
 The fastest way to get started is to run the end-to-end notebooks inside
 the ``notebooks/`` folder.  The steps below show the minimal Python API.
 
+.. figure:: _static/images/coarse_fine_registration.svg
+   :alt: Coarse-to-fine registration strategy
+   :align: center
+   :width: 100%
+
+   **Figure 1.** CORE's two-stage registration strategy.  The coarse stage performs rigid and
+   elastic alignment at low resolution; the fine stage refines cell-level correspondence using
+   nuclei point-sets and shape-aware coherent point drift (CPD).
+
 1. Edit ``config.py``
 ---------------------
 
@@ -38,6 +47,14 @@ Set at least the two WSI paths and the desired resolutions:
 
 4. Extract tissue masks
 -----------------------
+
+.. figure:: _static/images/tissue_mask_example.svg
+   :alt: Prompt-based tissue masking
+   :align: center
+   :width: 95%
+
+   **Figure 2.** Prompt-based tissue segmentation.  VisionAgent uses a text prompt to isolate
+   the tissue region, producing a binary mask that is then used to guide registration.
 
 .. code-block:: python
 
@@ -100,6 +117,15 @@ nuclei CSV files with ``global_x`` and ``global_y`` columns.
 
 8. Evaluate
 -----------
+
+.. figure:: _static/images/evaluation_tre.svg
+   :alt: Target Registration Error before and after registration
+   :align: center
+   :width: 95%
+
+   **Figure 3.** Target Registration Error (TRE) before and after CORE registration.  Blue dots
+   are fixed landmark positions; crosses show the corresponding moving landmarks.  A good
+   registration brings the two sets of points into close agreement.
 
 .. code-block:: python
 
