@@ -1,59 +1,58 @@
-import torch as t
-import torch.nn.functional as tfun
-import torchvision.transforms as trans
-import torch.optim as topt
+import torch
+import torch.nn.functional as F
+import torchvision.transforms as transforms
+import torch.optim as optim
 from typing import Optional, Tuple, List, Union, Dict, Any
 import numpy as np
 import math
 import cv2
 from skimage import color
 from pathlib import Path
-from tqdm.auto import tqdm  
+from tqdm.auto import tqdm
 
 
-
-
-
-def initialize_deformation_field(input_tensor: t.Tensor) -> t.Tensor:
- 
+def initialize_deformation_field(input_tensor: torch.Tensor) -> torch.Tensor:
+    """Initialize a zero deformation field matching the spatial dimensions of the input tensor."""
     dim_count = len(input_tensor.size()) - 2
-    return t.zeros((input_tensor.size(0), input_tensor.size(2), input_tensor.size(3)) + (dim_count,)).type_as(input_tensor)
+    return torch.zeros(
+        (input_tensor.size(0), input_tensor.size(2), input_tensor.size(3)) + (dim_count,)
+    ).type_as(input_tensor)
 
 
-def build_reference_coordinate_system(input_tensor: Optional[t.Tensor] = None,
-                                   dimensions: Optional[t.Size] = None,
-                                   compute_device: Optional[Union[str, t.device]] = None) -> t.Tensor:
- 
+def build_reference_coordinate_system(input_tensor: Optional[torch.Tensor] = None,
+                                       dimensions: Optional[torch.Size] = None,
+                                       compute_device: Optional[Union[str, torch.device]] = None) -> torch.Tensor:
+    """Build a reference coordinate grid for the given tensor dimensions."""
     if input_tensor is not None:
         dimensions = input_tensor.size()
     
     # Convert string device specification to torch.device
     if isinstance(compute_device, str):
-        compute_device = t.device(compute_device)
+        compute_device = torch.device(compute_device)
     
     if compute_device is None and input_tensor is not None:
-        base_transform = t.eye(len(dimensions)-1)[:-1, :].unsqueeze(0).type_as(input_tensor)
+        base_transform = torch.eye(len(dimensions)-1)[:-1, :].unsqueeze(0).type_as(input_tensor)
     else:
-        base_transform = t.eye(len(dimensions)-1, device=compute_device)[:-1, :].unsqueeze(0)
+        base_transform = torch.eye(len(dimensions)-1, device=compute_device)[:-1, :].unsqueeze(0)
     
-    base_transform = t.repeat_interleave(base_transform, dimensions[0], dim=0)
-    coordinate_grid = tfun.affine_grid(base_transform, dimensions, align_corners=False)
+    base_transform = torch.repeat_interleave(base_transform, dimensions[0], dim=0)
+    coordinate_grid = F.affine_grid(base_transform, dimensions, align_corners=False)
     
     return coordinate_grid
 
 
-def gaussian_smoothing(input_tensor: t.Tensor, blur_sigma: float) -> t.Tensor:
-
-    with t.set_grad_enabled(False):
+def gaussian_smoothing(input_tensor: torch.Tensor, blur_sigma: float) -> torch.Tensor:
+    """Apply Gaussian blur to a tensor."""
+    with torch.set_grad_enabled(False):
         kernel_width = int(blur_sigma * 2.54) + 1 
         if kernel_width % 2 == 0:
             kernel_width += 1
-        return trans.GaussianBlur(kernel_width, blur_sigma)(input_tensor)
+        return transforms.GaussianBlur(kernel_width, blur_sigma)(input_tensor)
 
 
-def deformation_loss(vector_field: t.Tensor, 
-                               compute_device: t.device = t.device("cuda"),
-                               weight_map: Optional[t.Tensor] = None) -> t.Tensor:
+def deformation_loss(vector_field: torch.Tensor,
+                               compute_device: torch.device = torch.device("cuda"),
+                               weight_map: Optional[torch.Tensor] = None) -> torch.Tensor:
     dim_count = len(vector_field.size()) - 2
     
     if dim_count == 2:
@@ -66,29 +65,27 @@ def deformation_loss(vector_field: t.Tensor,
             # Apply spatial weighting if provided
             x_weight = weight_map[:, 1:, :].unsqueeze(-1)
             y_weight = weight_map[:, :, 1:].unsqueeze(-1)
-            smoothness_term = (t.mean(x_grad * x_weight) + t.mean(y_grad * y_weight)) / 2
+            smoothness_term = (torch.mean(x_grad * x_weight) + torch.mean(y_grad * y_weight)) / 2
         else:
-            smoothness_term = (t.mean(x_grad) + t.mean(y_grad)) / 2
+            smoothness_term = (torch.mean(x_grad) + torch.mean(y_grad)) / 2
     else:
         raise ValueError("Unsupported dimensionality. Must be 2D or 3D.")
         
     return smoothness_term
 
 
+def scale_tensor_to_dimensions(input_tensor: torch.Tensor,
+                               target_dimensions: torch.Size,
+                               interpolation_method: str = 'bilinear') -> torch.Tensor:
+    """Resize input tensor to the given spatial dimensions."""
+    return F.interpolate(input_tensor, size=target_dimensions,
+                         mode=interpolation_method, align_corners=False)
 
 
-
-def scale_tensor_to_dimensions(input_tensor: t.Tensor, 
-                            target_dimensions: t.Size, 
-                            interpolation_method: str = 'bilinear') -> t.Tensor:
-
-    return tfun.interpolate(input_tensor, size=target_dimensions, 
-                          mode=interpolation_method, align_corners=False)
-
-def compute_normalized_cross_correlation(sources: t.Tensor, 
-                                      targets: t.Tensor, 
-                                      device: Optional[Union[str, t.device]] = None, 
-                                      **config_params) -> t.Tensor:
+def compute_normalized_cross_correlation(sources: torch.Tensor,
+                                         targets: torch.Tensor,
+                                         device: Optional[Union[str, torch.device]] = None,
+                                         **config_params) -> torch.Tensor:
     ndim = len(sources.size()) - 2
     if ndim not in [2, 3]:
         raise ValueError("Unsupported number of dimensions.")
@@ -96,14 +93,14 @@ def compute_normalized_cross_correlation(sources: t.Tensor,
 
     window = (size, ) * ndim
     if device is None:
-        sum_filt = t.ones([1, 1, *window]).type_as(sources)
+        sum_filt = torch.ones([1, 1, *window]).type_as(sources)
     else:
-        sum_filt = t.ones([1, 1, *window], device=device)
+        sum_filt = torch.ones([1, 1, *window], device=device)
 
     pad_no = math.floor(window[0] / 2)
     stride = ndim * (1,)
     padding = ndim * (pad_no,)
-    conv_fn = getattr(tfun, 'conv%dd' % ndim)
+    conv_fn = getattr(F, 'conv%dd' % ndim)
     sources_denom = sources**2
     targets_denom = targets**2
     numerator = sources*targets
@@ -119,25 +116,25 @@ def compute_normalized_cross_correlation(sources: t.Tensor,
     sources_var = sources_denom_sum - 2 * u_sources * sources_sum + u_sources * u_sources * size
     targets_var = targets_denom_sum - 2 * u_targets * targets_sum + u_targets * u_targets * size
     ncc = cross * cross / (sources_var * targets_var + 1e-5)
-    return -t.mean(ncc)
+    return -torch.mean(ncc)
 
 
-def apply_deformation_field(input_tensor: t.Tensor, 
-                         vector_field: t.Tensor, 
-                         coord_grid: Optional[t.Tensor] = None, 
-                         interpolation_method: str = 'bilinear', 
-                         boundary_handling: str = 'zeros', 
-                         compute_device: Optional[Union[str, t.device]] = None) -> t.Tensor:
-
+def apply_deformation_field(input_tensor: torch.Tensor,
+                             vector_field: torch.Tensor,
+                             coord_grid: Optional[torch.Tensor] = None,
+                             interpolation_method: str = 'bilinear',
+                             boundary_handling: str = 'zeros',
+                             compute_device: Optional[Union[str, torch.device]] = None) -> torch.Tensor:
+    """Apply a deformation field to warp the input tensor."""
     # Convert string device specification to torch.device
     if isinstance(compute_device, str):
-        compute_device = t.device(compute_device)
+        compute_device = torch.device(compute_device)
         
     if coord_grid is None:
         coord_grid = build_reference_coordinate_system(input_tensor=input_tensor, compute_device=compute_device)
         
     sampling_coordinates = coord_grid + vector_field
-    deformed_tensor = tfun.grid_sample(input_tensor, sampling_coordinates, 
+    deformed_tensor = F.grid_sample(input_tensor, sampling_coordinates, 
                                     mode=interpolation_method, 
                                     padding_mode=boundary_handling, 
                                     align_corners=False)
@@ -145,15 +142,15 @@ def apply_deformation_field(input_tensor: t.Tensor,
     return deformed_tensor
 
 
-def scale_deformation_field(vector_field: t.Tensor, 
-                          new_dimensions: Union[t.Size, Tuple[int, int]], 
-                          interpolation_method: str = 'bilinear') -> t.Tensor:
+def scale_deformation_field(vector_field: torch.Tensor,
+                          new_dimensions: Union[torch.Size, Tuple[int, int]], 
+                          interpolation_method: str = 'bilinear') -> torch.Tensor:
 
     # Permute to channel-first format for interpolation
     channel_first = vector_field.permute(0, 3, 1, 2)
     
     # Perform interpolation
-    resized = tfun.interpolate(
+    resized = F.interpolate(
         channel_first, 
         size=new_dimensions, 
         mode=interpolation_method, 
@@ -164,11 +161,11 @@ def scale_deformation_field(vector_field: t.Tensor,
     return resized.permute(0, 2, 3, 1)
 
 
-def create_multiscale_representation(input_tensor: t.Tensor, 
-                                   level_count: int, 
-                                   interpolation_method: str = 'bilinear',
-                                   scale_factor: float = 2.0) -> List[t.Tensor]:
-  
+def create_multiscale_representation(input_tensor: torch.Tensor,
+                                      level_count: int,
+                                      interpolation_method: str = 'bilinear',
+                                      scale_factor: float = 2.0) -> List[torch.Tensor]:
+    """Build a multi-scale image pyramid from fine to coarse."""
     pyramid_levels = [None] * level_count
     
     # Build from fine to coarse
@@ -183,7 +180,7 @@ def create_multiscale_representation(input_tensor: t.Tensor,
                                for j in range(len(prev_size)))
             
             # Extract just the spatial dimensions
-            spatial_dims = t.Size(current_dims)[2:]
+            spatial_dims = torch.Size(current_dims)[2:]
             
             # Apply smoothing to prevent aliasing, then downsample
             smoothed = gaussian_smoothing(pyramid_levels[i+1], 1)
@@ -195,11 +192,11 @@ def create_multiscale_representation(input_tensor: t.Tensor,
     return pyramid_levels
 
 
-def convert_image_to_tensor(img_array: np.ndarray, compute_device: Union[str, t.device] = "cpu") -> t.Tensor:
-  
+def convert_image_to_tensor(img_array: np.ndarray, compute_device: Union[str, torch.device] = "cpu") -> torch.Tensor:
+    """Convert a numpy image array to a PyTorch tensor."""
     # Convert string device specification to torch.device
     if isinstance(compute_device, str):
-        compute_device = t.device(compute_device)
+        compute_device = torch.device(compute_device)
         
     # Normalize image if it's not already in [0, 1] range
     if img_array.dtype != np.float32 and img_array.dtype != np.float64:
@@ -208,22 +205,22 @@ def convert_image_to_tensor(img_array: np.ndarray, compute_device: Union[str, t.
     
     if len(img_array.shape) == 3:
         # Color image
-        return t.from_numpy(img_array).permute(2, 0, 1).unsqueeze(0).to(compute_device)
+        return torch.from_numpy(img_array).permute(2, 0, 1).unsqueeze(0).to(compute_device)
     elif len(img_array.shape) == 2:
         # Grayscale image
-        return t.from_numpy(img_array).unsqueeze(0).unsqueeze(0).to(compute_device)
+        return torch.from_numpy(img_array).unsqueeze(0).unsqueeze(0).to(compute_device)
     else:
         raise ValueError(f"Unsupported image dimensions: {img_array.shape}")
 
 
 def prepare_image_tensors(source_image: np.ndarray, 
                         target_image: np.ndarray, 
-                        compute_device: Union[str, t.device],
-                        normalize: bool = True) -> Tuple[t.Tensor, t.Tensor]:
+                        compute_device: Union[str, torch.device],
+                        normalize: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
 
     # Convert string device specification to torch.device
     if isinstance(compute_device, str):
-        compute_device = t.device(compute_device)
+        compute_device = torch.device(compute_device)
         
     # Convert to grayscale if RGB
     if len(source_image.shape) == 3 and source_image.shape[2] == 3:
@@ -246,8 +243,8 @@ def prepare_image_tensors(source_image: np.ndarray,
     tensor_target = convert_image_to_tensor(gray_target, compute_device)
 
     # Create tensors with gradient tracking
-    source_tensor = tensor_source.clone().detach().to(dtype=t.float32, device=compute_device).requires_grad_(True)
-    target_tensor = tensor_target.clone().detach().to(dtype=t.float32, device=compute_device).requires_grad_(True)
+    source_tensor = tensor_source.clone().detach().to(dtype=torch.float32, device=compute_device).requires_grad_(True)
+    target_tensor = tensor_target.clone().detach().to(dtype=torch.float32, device=compute_device).requires_grad_(True)
 
     return source_tensor, target_tensor
 
@@ -256,13 +253,13 @@ def elastic_image_registration(
     target: np.ndarray, 
     similarity_metric: str = "ncc",
     similarity_metric_params: Dict[str, Any] = {"size": 7},
-    compute_device: Union[str, t.device] = "cuda",
+    compute_device: Union[str, torch.device] = "cuda",
     verbose: bool = False,
     output_dir: Optional[Union[str, Path]] = None,
     save_intermediate: bool = False
-) -> Tuple[t.Tensor, t.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     # Setup
-    device = t.device(compute_device) if isinstance(compute_device, str) else compute_device
+    device = torch.device(compute_device) if isinstance(compute_device, str) else compute_device
     # Resize source to match target dimensions (preserving reflect border) before building pyramids
     aligned_source = cv2.warpAffine(source, np.eye(2, 3), (target.shape[1], target.shape[0]), borderMode=cv2.BORDER_REFLECT)
     source_t, target_t = prepare_image_tensors(aligned_source, target, device)
@@ -291,9 +288,9 @@ def elastic_image_registration(
 
         # Optimizer: LBFGS on final level, Adam otherwise
         if lvl == pyramid_levels - 1:
-            optimizer = topt.LBFGS([def_field], lr=learning_rates[lvl], max_iter=50, line_search_fn="strong_wolfe")
+            optimizer = optim.LBFGS([def_field], lr=learning_rates[lvl], max_iter=50, line_search_fn="strong_wolfe")
         else:
-            optimizer = topt.Adam([def_field], lr=learning_rates[lvl])
+            optimizer = optim.Adam([def_field], lr=learning_rates[lvl])
 
         weight = regularization_weights[lvl]
 
@@ -309,7 +306,7 @@ def elastic_image_registration(
 
             loss = optimizer.step(closure)
 
-            with t.no_grad():
+            with torch.no_grad():
                 # Optional clipping to prevent folding
                 max_disp = 5.0  # pixels
                 def_field.clamp_(-max_disp, max_disp)
@@ -327,7 +324,6 @@ def elastic_image_registration(
     #     cv2.imwrite(os.path.join(output_dir, "final_warped.png"), (final_warped.detach().cpu().numpy()[0, 0] * 255).astype(np.uint8))
 
     return final_def, final_warped
-
 
 
 def compute_deformation_and_apply(

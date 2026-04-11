@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import SimpleITK as sitk
 import csv
 import torch
-import math
 import numpy as np
 from skimage import exposure, filters, img_as_float, color, measure, morphology
 from skimage.registration import phase_cross_correlation
@@ -30,9 +29,9 @@ def skip_subsample(points, n_samples=1000):
     return points[::step][:n_samples]
 
 def gamma_corrections(img, gamma):
-        invGamma = 1.0 / gamma
-        table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
-        return cv2.LUT(img, table)
+    inv_gamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    return cv2.LUT(img, table)
          
 def tensor_to_rgb_numpy(tensor):
     # (1, 1, H, W) -> (3, H, W) -> (H, W, 3)
@@ -195,9 +194,6 @@ def apply_deformation_to_points(points, deformation_field):
     disp_y = deformation_field[1]
 
     H, W = disp_x.shape
-    print("height", H)
-    print("width", W)
-    # Points might be float and anywhere inside image, so use interpolation of deformation field
     # Interpolate displacement at each point's coordinate
     warped_points = np.zeros_like(points)
 
@@ -415,7 +411,6 @@ def matrix_mha(image, matrix):
 
 def combine_deformation(u_x, u_y, v_x, v_y):
     y_size, x_size = np.shape(u_x)
-    print("u_x shape: ", u_x.shape)
     grid_x, grid_y = np.meshgrid(np.arange(x_size), np.arange(y_size))
     added_y = grid_y + v_y
     added_x = grid_x + v_x
@@ -454,9 +449,9 @@ def apply_displacement_field(image, displacement_field):
     if len(image.shape) == 3:
         warped_image = np.zeros_like(image)
         for c in range(image.shape[2]):
-            warped_image[:, :, c] = scnd.map_coordinates(image[:, :, c], coords, order=1)
+            warped_image[:, :, c] = nd.map_coordinates(image[:, :, c], coords, order=1)
     else:
-        warped_image = scnd.map_coordinates(image, coords, order=1)
+        warped_image = nd.map_coordinates(image, coords, order=1)
     
     return warped_image
 
@@ -635,33 +630,27 @@ def resample_displacement_field(u_x, u_y, output_x_size, output_y_size):
     u_y = u_y * output_y_size/y_size
     return u_x, u_y
 
-def warp_image(image, u_x, u_y):
-    y_size, x_size = image.shape
-    grid_x, grid_y = np.meshgrid(np.arange(x_size), np.arange(y_size))
-    return nd.map_coordinates(image, [grid_y + u_y, grid_x + u_x], order=3, cval=0.0)
 def matrix_df(image, matrix):
-    y_size, x_size,_ = np.shape(image)
+    y_size, x_size, _ = np.shape(image)
     x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
-    # You should use:
     points = np.vstack((x_grid.ravel(), y_grid.ravel(), np.ones_like(x_grid).ravel()))
     transformed_points = matrix @ points
     u_x = np.reshape(transformed_points[0, :], (y_size, x_size)) - x_grid
     u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
     return u_x, u_y
     
-def load_image(path):
+def load_image_as_grayscale(path):
+    """Load an image and convert it to grayscale."""
     image = sitk.ReadImage(path)
     image = sitk.GetArrayFromImage(image)
     if image.ndim == 4:  # [z, y, x, c] format
-        image = image[:, :, :3]   # Selecting the first z-slice (if needed)
-    if image.ndim == 3 and image.shape[-1] >= 3:  # Ensure at least 3 channels exist
-        image = image
+        image = image[:, :, :3]
     image = color.rgb2gray(image)
     return image
 
-def load_landmarks(path):
+def load_landmarks_no_header(path):
     """
-    Load the first two columns of landmark data from a CSV file (ignores header).
+    Load the first two columns of landmark data from a CSV file (no header).
     """
     landmarks = pd.read_csv(path, header=None, usecols=[0, 1]).values.astype(np.float64)
     return landmarks
@@ -727,10 +716,7 @@ def gaussian_filter(image, sigma):
 def round_up_to_odd(value):
     return int(np.ceil(value) // 2 * 2 + 1)
 
-def dice(image_1, image_2):
-    image_1 = image_1.astype(bool)
-    image_2 = image_2.astype(bool)
-    return 2 * np.logical_and(image_1, image_2).sum() / (image_1.sum() + image_2.sum())
+
 def load_image(path):
     """
     Load an image and return it as RGB (not converting to grayscale).
@@ -751,6 +737,8 @@ def load_image(path):
         image = image[:, :, :3]
         
     return image
+
+
 def load_landmarks(path):
     """
     Load landmarks from a CSV file.
@@ -787,65 +775,7 @@ def print_rtre(source_landmarks, target_landmarks, x_size, y_size):
     return mean, median, mmax, mmin
 
 
-def sort_coordinates(set1, set2):
-    """
-    Match points between fixed and moving point set.
-
-    Args:
-        set1 (np.array): Fixed point set
-        set2 (np.array): Moving point set
-
-    Returns:
-        np.array: New moving point set
-    """
-    # Match points using K nearest neighbors.
-    sorted_move = []
-    set1 = np.array([[coord[0], coord[1]] for coord in set1])
-    set2 = np.array([[coord[0], coord[1]] for coord in set2])
-    knn = NearestNeighbors(n_neighbors=1, algorithm='auto').fit(set2)
-    for coord in set1:
-        distances, indices = knn.kneighbors([[coord[0], coord[1]]])
-        sorted_move.append(set2[indices])
-    # Return matched points.
-    return np.array(sorted_move)
-
-def dice(fixed, moving):
-    # Calculate DICE coefficient between fixed and moving images.
-    intersection = np.sum(np.logical_and(fixed, moving))
-    union = np.sum(np.logical_or(fixed, moving))
-    
-    if union == 0:
-        return 0  # handle the case where both arrays are empty
-    
-    dice_coefficient = 2.0 * intersection / union
-    return dice_coefficient
-
-
 def compute_center_of_mass(array):
     # Calculates the center of mass of point set.
     center_of_mass_2d = np.mean(array, axis=0)[:-1]
     return center_of_mass_2d
-
-def rotate_point(x, y, cx, cy, angle):
-    """
-    Rotate point set around center with certain angle.
-
-    Args:
-        x (float): x-coordinate
-        y (float): y-coordinate
-        cx (float): center x-coordinate
-        cy (float): center y-coordinate
-        angle (float): rotation angle
-
-    Returns:
-        float: rotated x coordinate
-        float: rotated y coordinate
-    """
-    # convert angles to radians
-    angle_radians = math.radians(angle)
-    
-    # Apply rotation formula
-    x_prime = (x - cx) * math.cos(angle_radians) - (y - cy) * math.sin(angle_radians) + cx
-    y_prime = (x - cx) * math.sin(angle_radians) + (y - cy) * math.cos(angle_radians) + cy
-    
-    return x_prime, y_prime

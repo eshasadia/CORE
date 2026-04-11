@@ -84,10 +84,10 @@ class StainNormalizer:
 
     def process(self, img_path):
         """Main workflow to normalize image and extract stains."""
-        if img_path is str:
+        if isinstance(img_path, str):
             img = self.read_image(img_path)
         else:
-            img=img_path
+            img = img_path
         self.h, self.w, _ = img.shape
 
         OD = self.rgb_to_od(img)

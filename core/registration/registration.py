@@ -14,7 +14,6 @@ from scipy.optimize import minimize
 import core.registration.rigid as rigid
 import pandas as pd
 
-
 # ---------------------- Rigid Registration ---------------------- #
 
 def perform_rigid_registration(source_prep, target_prep, source_mask, target_mask):
@@ -54,10 +53,6 @@ def perform_shape_aware_registration(fixed_df, moving_df, shape_attribute='area'
     coords = registered_points[['registered_x', 'registered_y']].values
     return registrator, transform_matrix, coords
 
-
-
-
-
 # ---------------------- Mutual Nearest Neighbors ---------------------- #
 
 def find_mutual_nearest_neighbors(fixed_points, moving_points):
@@ -77,7 +72,6 @@ def find_mutual_nearest_neighbors(fixed_points, moving_points):
     print(f"Matched MNN pairs: {len(mnn_pairs)}")
     return fixed_mnn, moving_mnn, mnn_pairs
 
-
 # ---------------------- CPD Non-Rigid Registration ---------------------- #
 
 def perform_cpd_registration(moving_points, fixed_points, beta=0.5, alpha=0.01,
@@ -95,7 +89,6 @@ def perform_cpd_registration(moving_points, fixed_points, beta=0.5, alpha=0.01,
     )
     reg.register()
     return reg.TY
-
 
 # ---------------------- Displacement Field ---------------------- #
 
@@ -122,7 +115,6 @@ def create_displacement_field(source_points, transformed_points, image_shape,
     dy_field *= scale
 
     return np.stack((dx_field, dy_field), axis=-1)
-
 
 # ---------------------- Utility ---------------------- #
 

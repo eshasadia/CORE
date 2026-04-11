@@ -1,28 +1,27 @@
+"""
+Preprocessing functions for WSI registration
+"""
 import numpy as np
 import cv2
-import numpy as np
 import math
 from tiatoolbox.wsicore.wsireader import WSIReader, VirtualWSIReader
 import core.preprocessing.tissuemask as tissuemask
 import core.preprocessing.preprocessing as prep  # Original preprocessing module
-
-"""
-Preprocessing functions for WSI registration
-"""
 def load_wsi_images(source_path, target_path, resolution=0.625, data='', obj_power=''):
     """
     Load source and target WSI images
-    
+
     Args:
         source_path: Path to source WSI
         target_path: Path to target WSI
         resolution: Resolution for loading
-        
+        data: Dataset type (e.g. 'anhir')
+        obj_power: Objective power for VirtualWSIReader
+
     Returns:
         tuple: (source_wsi, target_wsi, source_image, target_image)
     """
-    # Load WSI readers
-    if data=='anhir':
+    if data == 'anhir':
         target_wsi = VirtualWSIReader.open(target_path)
         source_wsi = VirtualWSIReader.open(source_path)
 
@@ -131,19 +130,20 @@ def load_slide(image_path_1: str, resolution: float = 0.625):
 
 
 def pad_single(image, new_shape):
-    y_size, x_size,_ = image.shape
-    y_pad = ((int(np.floor((new_shape[0] - y_size)/2))), int(np.ceil((new_shape[0] - y_size)/2)))
-    x_pad = ((int(np.floor((new_shape[1] - x_size)/2))), int(np.ceil((new_shape[1] - x_size)/2)))
-    new_image = np.pad(image, (y_pad, x_pad,(0,0)), constant_values=0)
+    y_size, x_size, _ = image.shape
+    y_pad = (int(np.floor((new_shape[0] - y_size) / 2)), int(np.ceil((new_shape[0] - y_size) / 2)))
+    x_pad = (int(np.floor((new_shape[1] - x_size) / 2)), int(np.ceil((new_shape[1] - x_size) / 2)))
+    new_image = np.pad(image, (y_pad, x_pad, (0, 0)), constant_values=0)
     return new_image
 
+
 def pad_images_np(source, target):
-    y_size_source, x_size_source,_ = source.shape
-    y_size_target, x_size_target,_ = target.shape
+    y_size_source, x_size_source, _ = source.shape
+    y_size_target, x_size_target, _ = target.shape
     new_y_size = max(y_size_source, y_size_target)
     new_x_size = max(x_size_source, x_size_target)
     new_shape = (new_y_size, new_x_size)
- 
+
     padded_source = pad_single(source, new_shape)
     padded_target = pad_single(target, new_shape)
     return padded_source, padded_target
@@ -247,13 +247,15 @@ def pad_to_same_size(image_1: np.ndarray, image_2: np.ndarray, pad_value: float 
     return padded_image_1, padded_image_2, padding_params
 
 
-def resize_and_compute_translation( moving_image,fixed_image):
+def resize_and_compute_translation(moving_image, fixed_image):
     """
     Resizes fixed and moving images to the maximum dimensions using black padding
     and computes initial translation offsets for 2D or 3D images (where the 3rd dimension is the channel).
+
     Args:
         fixed_image (np.ndarray): The fixed image (2D or 3D).
         moving_image (np.ndarray): The moving image (2D or 3D).
+
     Returns:
         fixed_padded (np.ndarray): The fixed image with padding.
         moving_padded (np.ndarray): The moving image with padding.
@@ -302,12 +304,14 @@ def resize_and_compute_translation( moving_image,fixed_image):
         moving_padded[:moving_h, :moving_w] = moving_image
         fixed_padded[:fixed_h, :fixed_w, :] = fixed_image
         # moving_padded[ty:ty + moving_h, tx:tx + moving_w, :] = moving_image
-        fixed_padded=gamma_corrections( fixed_padded,1)
-        moving_padded=gamma_corrections(moving_padded,0.4)
+        fixed_padded = gamma_corrections(fixed_padded, 1)
+        moving_padded = gamma_corrections(moving_padded, 0.4)
         return fixed_padded, moving_padded, (fx, fy), (mx, my)
     
     else:
-        raise ValueError("Input images must be either 2D or 3D with channel as the 3rd dimension.") 
+        raise ValueError("Input images must be either 2D or 3D with channel as the 3rd dimension.")
+
+
 def gamma_corrections(img, gamma):
         invGamma = 1.0 / gamma
         table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
