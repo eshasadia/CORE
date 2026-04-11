@@ -20,52 +20,102 @@ Set at least the two WSI paths and the desired resolutions:
 
 .. code-block:: python
 
-   from core import load_wsi_images
+   from core.preprocessing.preprocessing import load_wsi_images
+   from core.config import PREPROCESSING_RESOLUTION
 
-   fixed_img, moving_img = load_wsi_images()
+   source_wsi, target_wsi, source, target = load_wsi_images(
+       SOURCE_WSI_PATH, TARGET_WSI_PATH, PREPROCESSING_RESOLUTION
+   )
 
-3. Extract tissue masks
------------------------
-
-.. code-block:: python
-
-   from core import extract_tissue_masks
-
-   fixed_mask, moving_mask = extract_tissue_masks(fixed_img, moving_img)
-
-4. Coarse (rigid) registration
--------------------------------
-
-.. code-block:: python
-
-   from core import perform_rigid_registration
-
-   rigid_result = perform_rigid_registration(fixed_img, moving_img,
-                                             fixed_mask, moving_mask)
-
-5. Fine (non-rigid) registration
+3. Pad images to a common canvas
 ---------------------------------
 
 .. code-block:: python
 
-   from core import elastic_image_registration
+   from core.preprocessing.padding import pad_images
 
-   nonrigid_result = elastic_image_registration(rigid_result)
+   source_prep, target_prep, padding_params = pad_images(source, target)
 
-6. Evaluate
+4. Extract tissue masks
+-----------------------
+
+.. code-block:: python
+
+   from core.preprocessing.preprocessing import extract_tissue_masks
+
+   source_mask, target_mask = extract_tissue_masks(
+       source_prep, target_prep, artefacts=False
+   )
+
+5. Coarse rigid registration
+-----------------------------
+
+.. code-block:: python
+
+   from core.registration.registration import perform_rigid_registration
+
+   moving_img_transformed, final_transform = perform_rigid_registration(
+       source_prep, target_prep, source_mask, target_mask
+   )
+
+6. Coarse non-rigid (elastic) registration
+-------------------------------------------
+
+.. code-block:: python
+
+   from core.registration.nonrigid import elastic_image_registration
+
+   displacement_field, warped_source = elastic_image_registration(
+       moving_img_transformed, target_prep
+   )
+
+7. Fine nuclei-level registration (optional)
+---------------------------------------------
+
+Fine registration refines alignment at the cell level using precomputed
+nuclei coordinates and shape-aware point-set registration.  It requires
+nuclei CSV files with ``global_x`` and ``global_y`` columns.
+
+.. code-block:: python
+
+   from core.preprocessing.nuclei_analysis import load_nuclei_coordinates
+   from core.registration.registration import perform_shape_aware_registration
+   from core.registration.nonrigid import compute_deformation_and_apply
+   from core.preprocessing.padding import pad_landmarks
+   import core.utils.util as util
+
+   moving_df = load_nuclei_coordinates(MOVING_NUCLEI_CSV)
+   fixed_df  = load_nuclei_coordinates(FIXED_NUCLEI_CSV)
+
+   deformation_field, moving_updated, fixed_points, moving_points = \
+       compute_deformation_and_apply(
+           source_prep, final_transform, displacement_field,
+           moving_df, fixed_df, padding_params, util, pad_landmarks
+       )
+
+   _, shape_transform, shape_coords = perform_shape_aware_registration(
+       fixed_points, moving_updated, shape_weight=0.3,
+       max_iterations=100, tolerance=1e-11
+   )
+
+8. Evaluate
 -----------
 
 .. code-block:: python
 
-   from core import evaluate_registration_tre
+   from core.evaluation.evaluation import evaluate_registration_tre
 
-   tre = evaluate_registration_tre(nonrigid_result)
-   print(f"Target Registration Error: {tre:.4f}")
+   metrics = evaluate_registration_tre(
+       fixed_points, moving_points, final_transform,
+       target_shape=target_prep.shape
+   )
+   print(f"TRE before: {metrics['tre_initial']:.4f}")
+   print(f"TRE after : {metrics['tre_final']:.4f}")
 
 Example notebooks
 -----------------
 
 Detailed walkthroughs are available in the ``notebooks/`` directory:
 
-* ``notebooks/coarse_registration.ipynb`` – coarse alignment demo
-* ``notebooks/fine_registration.ipynb`` – nuclei-level fine alignment demo
+* ``notebooks/1-WSI_Registration.ipynb`` – coarse rigid and elastic registration demo
+* ``notebooks/2-WSI_Registration.ipynb`` – nuclei-level fine registration demo

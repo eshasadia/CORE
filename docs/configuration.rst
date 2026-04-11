@@ -36,9 +36,11 @@ Resolution parameters
    * - Parameter
      - Description
    * - ``PREPROCESSING_RESOLUTION``
-     - MPP (microns-per-pixel) used for coarse alignment. Default: ``0.625``.
+     - Objective power (magnification) at which WSIs are loaded for coarse
+       rigid and elastic registration. Default: ``0.625``.
    * - ``REGISTRATION_RESOLUTION``
-     - MPP used for nuclei detection and fine alignment. Default: ``40``.
+     - Objective power (magnification) at which nuclei are detected and
+       fine shape-aware registration is performed. Default: ``40``.
 
 ``REGISTRATION_RESOLUTION`` must be strictly greater than
 ``PREPROCESSING_RESOLUTION``.
