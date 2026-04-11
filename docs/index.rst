@@ -8,6 +8,14 @@ multi-stain whole-slide images (WSIs).  It combines prompt-based tissue masking,
 alignment, and nuclei-level fine registration to deliver precise cell-level correspondence across
 stains.
 
+.. figure:: _static/images/pipeline_overview.svg
+   :alt: CORE pipeline overview
+   :align: center
+   :width: 100%
+
+   **Figure 1.** End-to-end CORE pipeline: from raw WSI input through preprocessing, tissue
+   masking, coarse rigid/elastic registration, fine nuclei-level registration, to TRE evaluation.
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents
