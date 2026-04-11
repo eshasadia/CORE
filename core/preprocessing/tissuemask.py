@@ -48,17 +48,15 @@ class FlorenceTissueMaskExtractor:
                     segments=self._segment_with_prompts(norm, prompt)
         if artefacts:
             if segments:
-                # return [(segment['mask'] * 255).astype(np.uint8) for segment in segments]
                 return (segments[0]['mask'] * 255).astype(np.uint8)
-        # Combine all segment masks into a single image (maximum value)
+            # No segments found for artefact extraction — fall through to fallback
         else:
             if segments:
                 combined_mask = np.zeros_like(segments[0]['mask'], dtype=np.uint8)
                 for segment in segments:
                     combined_mask = np.maximum(combined_mask, (segment['mask'] * 255).astype(np.uint8))
-                
+
                 return combined_mask
-      
 
         # Fallback to unet method
         return self._fallback_mask(image)
@@ -70,7 +68,7 @@ class FlorenceTissueMaskExtractor:
         except Exception:
             return []
 
-   def _unet_mask(self, image: np.ndarray) -> np.ndarray:
+    def _unet_mask(self, image: np.ndarray) -> np.ndarray:
         extractor = UNetTissueMaskExtractor(model_path="", device="cuda")
         mask = extractor.extract_masks(image)
         
@@ -124,35 +122,24 @@ class FlorenceTissueMaskExtractor:
                         break
 
             if len(segments) > 0:
-                mask = (segments[0]['mask'] * 255).astype(np.uint8)
-                fallback_mode = False
-                return mask
-            else:
-                fallback_mode = True
+                return (segments[0]['mask'] * 255).astype(np.uint8)
 
-            if fallback_mode:
-                # Convert to grayscale and apply Otsu's thresholding
-                gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-                _, threshold_mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                mask = threshold_mask
+            # Fallback: use Otsu's thresholding
+            gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            _, threshold_mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            mask = threshold_mask
             # Find connected components
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
             mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
             mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
             mask_binary = (mask > 0).astype(np.uint8)
-            mask_binary=1-mask_binary
-            # Find all connected components
+            mask_binary = 1 - mask_binary
+            # Find the largest connected component
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_binary, connectivity=8)
             areas = stats[1:, cv2.CC_STAT_AREA]
-                
-                # Find the largest component (adding 1 because we skipped background)
             largest_component_label = np.argmax(areas) + 1
-                
-                # Create a mask containing only the largest component
             largest_component_mask = (labels == largest_component_label).astype(np.uint8)
-            mask=largest_component_mask
-                # return largest_component_mask
-            return mask
+            return largest_component_mask
 
 """
 extractor =  FlorenceTissueMaskExtractor()

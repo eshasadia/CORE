@@ -42,7 +42,7 @@ def perform_rigid_registration(source_prep, target_prep, source_mask, target_mas
 # ---------------------- Shape-Aware Registration ----------------------
 def perform_shape_aware_registration(fixed_df, moving_df, shape_attribute='area',
                                      shape_weight=0.3, max_iterations=50, tolerance=1e-6):
-    registrator = ShapeAwarePointSetRegistration(
+    registrator = rigid.ShapeAwarePointSetRegistration(
         fixed_df, moving_df,
         shape_attribute=shape_attribute,
         shape_weight=shape_weight,
@@ -70,7 +70,7 @@ def find_mutual_nearest_neighbors(fixed_points, moving_points):
     nn_moving_to_fixed = NearestNeighbors(n_neighbors=1).fit(fixed_points)
     dist2, idx2 = nn_moving_to_fixed.kneighbors(moving_points)
 
-    mnn_pairs = [(i, j[0]) for i, j in enumerate(idx1) if idx2[j[0]] == i]
+    mnn_pairs = [(i, j[0]) for i, j in enumerate(idx1) if idx2[j[0]][0] == i]
     fixed_mnn = np.array([fixed_points[i] for i, _ in mnn_pairs])
     moving_mnn = np.array([moving_points[j] for _, j in mnn_pairs])
 

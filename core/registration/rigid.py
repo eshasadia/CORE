@@ -259,11 +259,10 @@ im2 = cv2.imread("/path/to/moving_image.png")
 
 # Create aligner and register images
 aligner =  XFeatReg()
-M, aligned_image, match_vis = aligner.register(im1, im2)
+M, aligned_image = aligner.register(im1, im2)
 
 # Display results
 cv2.imshow("Aligned Image", aligned_image)
-cv2.imshow("Matches", match_vis)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
