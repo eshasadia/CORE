@@ -1,10 +1,6 @@
-from typing import Iterable, Tuple, List, Dict
+from typing import Dict, Iterable, List, Tuple
 import math
 import numpy as np
-import numpy as np
-from typing import Tuple, Dict
-import numpy as np
-from typing import Dict
 
 
 def calculate_pad_value(size_1: Iterable[int], size_2: Iterable[int]) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]:

@@ -6,7 +6,6 @@ import cv2
 import os
 from skimage import morphology, measure
 from scipy import ndimage
-import os 
 # import vision_agent
 
 from vision_agent.tools import florence2_sam2_instance_segmentation
@@ -43,9 +42,9 @@ class FlorenceTissueMaskExtractor:
                 if segments:
                     break
                 else:
-                    stain=stainnorm.StainNormalizer()
-                    norm, h, e=stain.process(image)
-                    segments=self._segment_with_prompts(norm, prompt)
+                    stain = stainnorm.StainNormalizer()
+                    norm, h, e = stain.process(image)
+                    segments = self._segment_with_prompts(norm, prompt)
         if artefacts:
             if segments:
                 return (segments[0]['mask'] * 255).astype(np.uint8)
@@ -77,8 +76,8 @@ class FlorenceTissueMaskExtractor:
         else:
             return self._fallback_mask(image)
     def _fallback_mask(self, image: np.ndarray) -> np.ndarray:
-        print("applying fall back")
         """Fallback method using Otsu threshold and morphology."""
+        print("Applying fallback tissue mask extraction.")
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         _, threshold_mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 

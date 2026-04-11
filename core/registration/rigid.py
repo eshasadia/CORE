@@ -271,22 +271,22 @@ cv2.destroyAllWindows()
 
 
 
-def rigid_registration( moving_img, fixed_img,moving_mask, fixed_mask, verbose=False):
+def rigid_registration(moving_img, fixed_img, moving_mask, fixed_mask, verbose=False):
     """
     Aligns a moving image to a fixed image using Trimorph and optionally XFeatReg if needed.
+
     Args:
         fixed_img (np.ndarray): Fixed image.
         moving_img (np.ndarray): Moving image.
         fixed_mask (np.ndarray): Fixed mask.
         moving_mask (np.ndarray): Moving mask.
         verbose (bool): If True, print intermediate steps.
+
     Returns:
         moving_img_transformed (np.ndarray): Final aligned moving image.
         final_transform (np.ndarray): Final transformation matrix (3x3).
-        timing (dict): Dictionary with timing info.
         ngf_metrics (dict): Dictionary with NGF metrics before and after optional second registration.
     """
-    # Make sure you have this module
     ngf_metrics = {}
     # Initial registration with Trimorph
     aligner = Trimorph()
@@ -306,7 +306,7 @@ def rigid_registration( moving_img, fixed_img,moving_mask, fixed_mask, verbose=F
         ngf_metrics['NGF XFeat'] = ngf_metric(fixed_img, moving_img_transformed)
         final_transform = best_transform1
     else:
-      # Optionally perform another registration step with XFeatReg
+        # Optionally perform another registration step with XFeatReg
         aligner = XFeatReg()
 
         # Register using already transformed image
@@ -327,7 +327,7 @@ def rigid_registration( moving_img, fixed_img,moving_mask, fixed_mask, verbose=F
         if ngf_initial >= ngf_second and ngf_initial >= ngf_third:
             final_transform = best_transform1
         elif ngf_second >= ngf_third:
-            final_transform = best_transform1 @ M1_hom 
+            final_transform = best_transform1 @ M1_hom
             moving_img_transformed = aligned_image
         else:
             final_transform = M2_hom
