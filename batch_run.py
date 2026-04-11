@@ -4,6 +4,18 @@ batch_run.py
 Run the CORE coarse-to-fine WSI registration pipeline on a batch of
 slide pairs described by a CSV file.
 
+Supported input formats
+-----------------------
+Both ``source_path`` and ``target_path`` may be any format supported by
+tiatoolbox (WSIReader) and pyvips.  Recognised extensions include:
+
+    Pyramidal WSI:  .svs, .ndpi, .mrxs, .scn, .vms, .vmu, .bif, .qptiff
+    TIFF family:    .tiff, .tif, .ome.tiff, .ome.tif, .btf
+    Other imaging:  .czi, .lif, .png, .jpg, .jpeg
+
+The registered output is always written as a pyramidal OME-TIFF
+(``.ome.tiff``), regardless of the input format.
+
 CSV format
 ----------
 The input CSV must contain at least two columns:
@@ -12,12 +24,12 @@ The input CSV must contain at least two columns:
 
 Optional columns (override the CLI defaults for individual pairs):
 
-    deformation_output  – path for the combined MHA deformation field
-    wsi_output          – path for the registered OME-TIFF
+    deformation_output   – path for the combined MHA deformation field
+    wsi_output           – path for the registered OME-TIFF
     source_magnification – magnification at which the field was computed
     target_magnification – full-resolution magnification of the WSI
-    fixed_nuclei_csv    – nuclei CSV for the fixed image  (fine-reg only)
-    moving_nuclei_csv   – nuclei CSV for the moving image (fine-reg only)
+    fixed_nuclei_csv     – nuclei CSV for the fixed image  (fine-reg only)
+    moving_nuclei_csv    – nuclei CSV for the moving image (fine-reg only)
 
 Any column not present in the CSV row will fall back to the
 corresponding CLI argument.
@@ -84,6 +96,83 @@ from core.registration.registration import perform_rigid_registration
 from core.registration.nonrigid import elastic_image_registration
 import core.utils.util as util
 from apply_deformation_wsi import apply_deformation_to_wsi
+
+
+# ---------------------------------------------------------------------------
+# Format support
+# ---------------------------------------------------------------------------
+
+# Extensions recognised by tiatoolbox (WSIReader / VirtualWSIReader) and pyvips.
+# The check is case-insensitive; dual-suffix extensions (.ome.tiff) are listed
+# explicitly so they are matched before the single-suffix fallback.
+SUPPORTED_WSI_EXTENSIONS: tuple[str, ...] = (
+    # Dual-suffix OME-TIFF (must come before single .tiff/.tif)
+    ".ome.tiff",
+    ".ome.tif",
+    # Pyramidal WSI scanners
+    ".svs",    # Aperio / Leica
+    ".ndpi",   # Hamamatsu
+    ".mrxs",   # 3DHISTECH Mirax
+    ".scn",    # Leica SCN
+    ".vms",    # Hamamatsu VMS
+    ".vmu",    # Hamamatsu VMU
+    ".bif",    # Ventana BIF
+    ".qptiff", # PerkinElmer / Akoya
+    # TIFF family
+    ".tiff",
+    ".tif",
+    ".btf",    # Big TIFF
+    # Other supported imaging formats
+    ".czi",    # Zeiss CZI
+    ".lif",    # Leica LIF
+    ".png",
+    ".jpg",
+    ".jpeg",
+)
+
+
+def _wsi_stem(path: str) -> str:
+    """Return the base filename without any WSI-related suffix.
+
+    Handles dual-suffix filenames such as ``slide.ome.tiff`` correctly
+    (``Path.stem`` alone would return ``slide.ome`` in that case).
+
+    Examples
+    --------
+    >>> _wsi_stem("case1.svs")
+    'case1'
+    >>> _wsi_stem("/data/slide.ome.tiff")
+    'slide'
+    >>> _wsi_stem("my_slide.tif")
+    'my_slide'
+    """
+    name = Path(path).name.lower()
+    for ext in SUPPORTED_WSI_EXTENSIONS:
+        if name.endswith(ext):
+            # Preserve the original-case stem
+            return Path(path).name[: -len(ext)]
+    # Fallback: strip the last suffix
+    return Path(path).stem
+
+
+def _validate_wsi_path(path: str, label: str) -> None:
+    """Raise ``ValueError`` if *path* has an unrecognised WSI extension.
+
+    Parameters
+    ----------
+    path:
+        Filesystem path to the WSI file.
+    label:
+        Human-readable label used in the error message (e.g. ``"source"``).
+    """
+    name = Path(path).name.lower()
+    supported = any(name.endswith(ext) for ext in SUPPORTED_WSI_EXTENSIONS)
+    if not supported:
+        suffix = Path(path).suffix or "(no extension)"
+        raise ValueError(
+            f"Unsupported {label} WSI format: {suffix!r} ({path!r}).\n"
+            f"Supported extensions: {', '.join(SUPPORTED_WSI_EXTENSIONS)}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +353,7 @@ def run_batch(
 
         # Build per-pair output paths (use CSV columns if provided)
         pair_dir = Path(output_dir) / f"pair_{pair_num:04d}"
-        stem = Path(source_path).stem
+        stem = _wsi_stem(source_path)
 
         row_dict = row._asdict()
 
@@ -290,6 +379,10 @@ def run_batch(
         status    = "OK"
         error_msg = ""
         try:
+            # Validate input formats before running the pipeline
+            _validate_wsi_path(source_path, "source")
+            _validate_wsi_path(target_path, "target")
+
             _run_pair(
                 source_path=source_path,
                 target_path=target_path,
