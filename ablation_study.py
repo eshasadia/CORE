@@ -90,10 +90,14 @@ from core.preprocessing.padding import pad_images
 from core.preprocessing.preprocessing import extract_tissue_masks, load_wsi_images
 from core.registration.nonrigid import elastic_image_registration
 from core.registration.registration import (
+    convert_4x4_to_3x3_transform,
     create_displacement_field,
     find_mutual_nearest_neighbors,
+    perform_cpd_registration,
+    perform_icp_registration,
     perform_rigid_registration,
 )
+from core.registration.cpd import CPD as _CPD
 import core.utils.util as util
 
 # ── Optional fine-registration imports ────────────────────────────────────────
@@ -124,20 +128,32 @@ ALL_METHODS = [
     "itk_demons",
     "orb_ransac",
     "akaze_ransac",
+    # ── Point-based methods ──────────────────────────────────────────────
+    "sift_ransac",
+    "icp",
+    "cpd_rigid",
+    "cpd_affine",
+    "cpd_nonrigid",
 ]
 
 # Human-readable labels for tables / plots
 METHOD_LABELS: Dict[str, str] = {
-    "baseline":         "Baseline (none)",
-    "rigid_only":       "CORE Rigid only",
-    "elastic_only":     "CORE Elastic only",
-    "core_coarse":      "CORE Coarse (R+E)",
-    "core_full":        "CORE Full (R+E+Fine)",
+    "baseline":          "Baseline (none)",
+    "rigid_only":        "CORE Rigid only",
+    "elastic_only":      "CORE Elastic only",
+    "core_coarse":       "CORE Coarse (R+E)",
+    "core_full":         "CORE Full (R+E+Fine)",
     "phase_correlation": "Phase Correlation",
-    "itk_rigid_mi":     "ITK Rigid (MI)",
-    "itk_demons":       "ITK Demons",
-    "orb_ransac":       "ORB + RANSAC",
-    "akaze_ransac":     "AKAZE + RANSAC",
+    "itk_rigid_mi":      "ITK Rigid (MI)",
+    "itk_demons":        "ITK Demons",
+    "orb_ransac":        "ORB + RANSAC",
+    "akaze_ransac":      "AKAZE + RANSAC",
+    # ── Point-based methods ──────────────────────────────────────────────
+    "sift_ransac":       "SIFT + RANSAC",
+    "icp":               "ICP (Open3D)",
+    "cpd_rigid":         "CPD Rigid",
+    "cpd_affine":        "CPD Affine",
+    "cpd_nonrigid":      "CPD Non-rigid",
 }
 
 
@@ -738,7 +754,7 @@ def _keypoint_affine(
     Parameters
     ----------
     source, target : RGB uint8 arrays
-    descriptor     : 'ORB' or 'AKAZE'
+    descriptor     : 'ORB', 'AKAZE', or 'SIFT'
     min_matches    : minimum number of inlier matches required
 
     Returns
@@ -751,6 +767,9 @@ def _keypoint_affine(
     if descriptor == "ORB":
         det = cv2.ORB_create(nfeatures=10_000)
         norm = cv2.NORM_HAMMING
+    elif descriptor == "SIFT":
+        det = cv2.SIFT_create()
+        norm = cv2.NORM_L2
     else:  # AKAZE
         det = cv2.AKAZE_create()
         norm = cv2.NORM_HAMMING
@@ -850,6 +869,272 @@ def _warp_mask_displacement(
         cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0,
     )
     return warped.astype(bool)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Point-based method helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PT_MAX_POINTS = 3000   # max tissue points used by ICP / CPD
+
+
+def _extract_tissue_points(mask: np.ndarray, max_points: int = _PT_MAX_POINTS) -> np.ndarray:
+    """
+    Subsample foreground pixel coordinates from a binary tissue mask.
+
+    Returns
+    -------
+    np.ndarray of shape (N, 2) with (x, y) float32 coordinates.
+    """
+    ys, xs = np.where(mask > 0)
+    if len(xs) == 0:
+        raise RuntimeError("Tissue mask is empty — cannot extract points.")
+    points = np.column_stack([xs, ys]).astype(np.float32)
+    if len(points) > max_points:
+        rng = np.random.default_rng(seed=42)
+        idx = rng.choice(len(points), size=max_points, replace=False)
+        points = points[idx]
+    return points
+
+
+def _cpd_rigid_to_2x3(R: np.ndarray, t: np.ndarray, s: float) -> np.ndarray:
+    """
+    Convert CPD rigid parameters (R, t, s) to a 2×3 OpenCV affine matrix.
+
+    CPD rigid transform:  T(y) = s * y @ R.T + t
+    Expanded for a row vector [x, y]:
+        x' = s*(R[0,0]*x + R[1,0]*y) + t[0]
+        y' = s*(R[0,1]*x + R[1,1]*y) + t[1]
+    """
+    A = s * R          # 2×2
+    return np.array([
+        [A[0, 0], A[1, 0], t[0]],
+        [A[0, 1], A[1, 1], t[1]],
+    ], dtype=np.float64)
+
+
+def _cpd_affine_to_2x3(B: np.ndarray, t: np.ndarray) -> np.ndarray:
+    """
+    Convert CPD affine parameters (B, t) to a 2×3 OpenCV affine matrix.
+
+    CPD affine transform:  T(y) = y @ B.T + t
+    Expanded:
+        x' = B[0,0]*x + B[1,0]*y + t[0]
+        y' = B[0,1]*x + B[1,1]*y + t[1]
+    """
+    return np.array([
+        [B[0, 0], B[1, 0], t[0]],
+        [B[0, 1], B[1, 1], t[1]],
+    ], dtype=np.float64)
+
+
+def _points_to_dense_warp(
+    source_pts: np.ndarray,
+    target_pts: np.ndarray,
+    image_shape: Tuple[int, int],
+) -> np.ndarray:
+    """
+    Interpolate sparse point correspondences into a dense (H, W, 2) pixel-space
+    displacement field using the repo's `create_displacement_field`.
+    """
+    return create_displacement_field(
+        source_pts,
+        target_pts,
+        image_shape,
+        method=RegistrationParams.INTERPOLATION_METHOD,
+        sigma=RegistrationParams.DISPLACEMENT_SIGMA,
+        max_displacement=RegistrationParams.MAX_DISPLACEMENT,
+    )
+
+
+# ── 11. SIFT + RANSAC Affine ──────────────────────────────────────────────────
+
+def run_sift_ransac(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """SIFT keypoint matching + RANSAC affine estimation."""
+    result = MethodResult(method="sift_ransac", label=METHOD_LABELS["sift_ransac"])
+    t0 = time.perf_counter()
+    try:
+        M = _keypoint_affine(source, target, descriptor="SIFT")
+        warped = cv2.warpAffine(source, M, (target.shape[1], target.shape[0]))
+        result.time_total_s = time.perf_counter() - t0
+        warped_mask = _warp_mask(source_mask, M)
+        _compute_image_metrics(target, warped, target_mask, warped_mask, result)
+        if fixed_lm is not None and moving_lm is not None:
+            M3 = np.vstack([M, [0, 0, 1]])
+            warped_lm = _warp_landmarks_affine(moving_lm, np.linalg.inv(M3))
+            _compute_landmark_metrics(fixed_lm, warped_lm, target.shape, result)
+    except Exception as exc:
+        result.note = str(exc)
+    return result
+
+
+# ── 12. ICP ───────────────────────────────────────────────────────────────────
+
+def run_icp(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """
+    Iterative Closest Point (Open3D) on subsampled tissue mask points.
+    The resulting rigid transform is applied to warp the full image.
+    """
+    result = MethodResult(method="icp", label=METHOD_LABELS["icp"])
+    t0 = time.perf_counter()
+    try:
+        src_pts = _extract_tissue_points(source_mask)
+        tgt_pts = _extract_tissue_points(target_mask)
+
+        transform_4x4, _ = perform_icp_registration(src_pts, tgt_pts)
+
+        # Convert 4×4 → 3×3 → 2×3 for cv2.warpAffine
+        M3 = convert_4x4_to_3x3_transform(transform_4x4)
+        M = M3[:2]   # 2×3
+
+        warped = cv2.warpAffine(source, M, (target.shape[1], target.shape[0]))
+        result.time_total_s = time.perf_counter() - t0
+
+        warped_mask = _warp_mask(source_mask, M)
+        _compute_image_metrics(target, warped, target_mask, warped_mask, result)
+
+        if fixed_lm is not None and moving_lm is not None:
+            warped_lm = _warp_landmarks_affine(moving_lm, np.linalg.inv(M3))
+            _compute_landmark_metrics(fixed_lm, warped_lm, target.shape, result)
+    except Exception as exc:
+        result.note = str(exc)
+    return result
+
+
+# ── 13. CPD Rigid ─────────────────────────────────────────────────────────────
+
+def run_cpd_rigid(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """
+    Coherent Point Drift – Rigid variant on subsampled tissue mask points.
+    Recovers rotation, uniform scale, and translation; applies them as an
+    affine warp to the full image.
+    """
+    result = MethodResult(method="cpd_rigid", label=METHOD_LABELS["cpd_rigid"])
+    t0 = time.perf_counter()
+    try:
+        src_pts = _extract_tissue_points(source_mask).astype(np.float64)
+        tgt_pts = _extract_tissue_points(target_mask).astype(np.float64)
+
+        cpd = _CPD(method="rigid")
+        cpd(tgt_pts, src_pts, save_parameters=True)      # X=fixed, Y=moving
+        R, t, s = cpd.parameters[-1]                      # final theta
+
+        M = _cpd_rigid_to_2x3(R, t, s)
+        warped = cv2.warpAffine(source, M, (target.shape[1], target.shape[0]))
+        result.time_total_s = time.perf_counter() - t0
+
+        warped_mask = _warp_mask(source_mask, M)
+        _compute_image_metrics(target, warped, target_mask, warped_mask, result)
+
+        if fixed_lm is not None and moving_lm is not None:
+            M3 = np.vstack([M, [0, 0, 1]])
+            warped_lm = _warp_landmarks_affine(moving_lm, np.linalg.inv(M3))
+            _compute_landmark_metrics(fixed_lm, warped_lm, target.shape, result)
+    except Exception as exc:
+        result.note = str(exc)
+    return result
+
+
+# ── 14. CPD Affine ────────────────────────────────────────────────────────────
+
+def run_cpd_affine(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """
+    Coherent Point Drift – Affine variant on subsampled tissue mask points.
+    Allows independent scaling and shear on top of rotation/translation.
+    """
+    result = MethodResult(method="cpd_affine", label=METHOD_LABELS["cpd_affine"])
+    t0 = time.perf_counter()
+    try:
+        src_pts = _extract_tissue_points(source_mask).astype(np.float64)
+        tgt_pts = _extract_tissue_points(target_mask).astype(np.float64)
+
+        cpd = _CPD(method="affine")
+        cpd(tgt_pts, src_pts, save_parameters=True)      # X=fixed, Y=moving
+        B, t = cpd.parameters[-1]
+
+        M = _cpd_affine_to_2x3(B, t)
+        warped = cv2.warpAffine(source, M, (target.shape[1], target.shape[0]))
+        result.time_total_s = time.perf_counter() - t0
+
+        warped_mask = _warp_mask(source_mask, M)
+        _compute_image_metrics(target, warped, target_mask, warped_mask, result)
+
+        if fixed_lm is not None and moving_lm is not None:
+            M3 = np.vstack([M, [0, 0, 1]])
+            warped_lm = _warp_landmarks_affine(moving_lm, np.linalg.inv(M3))
+            _compute_landmark_metrics(fixed_lm, warped_lm, target.shape, result)
+    except Exception as exc:
+        result.note = str(exc)
+    return result
+
+
+# ── 15. CPD Non-rigid ─────────────────────────────────────────────────────────
+
+def run_cpd_nonrigid(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """
+    Coherent Point Drift – Non-rigid (deformable) variant.
+    Point correspondences are interpolated to a dense displacement field which
+    is then applied to warp the full image.
+    """
+    result = MethodResult(method="cpd_nonrigid", label=METHOD_LABELS["cpd_nonrigid"])
+    t0 = time.perf_counter()
+    try:
+        src_pts = _extract_tissue_points(source_mask).astype(np.float64)
+        tgt_pts = _extract_tissue_points(target_mask).astype(np.float64)
+
+        # Use repo's pycpd-backed CPD nonrigid (DeformableRegistration)
+        ty, _ = perform_cpd_registration(src_pts, tgt_pts)
+
+        # Build dense displacement field from the sparse correspondence src→ty
+        disp_hw2 = _points_to_dense_warp(src_pts, ty, source.shape[:2])
+
+        warped = util.apply_displacement_field(source, disp_hw2.transpose(2, 0, 1))
+        result.time_total_s = time.perf_counter() - t0
+
+        warped_mask = _warp_mask_displacement(source_mask, disp_hw2)
+        _compute_image_metrics(target, warped, target_mask, warped_mask, result)
+
+        if fixed_lm is not None and moving_lm is not None:
+            warped_lm = _warp_landmarks_displacement(moving_lm, disp_hw2)
+            _compute_landmark_metrics(fixed_lm, warped_lm, target.shape, result)
+    except Exception as exc:
+        result.note = str(exc)
+    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1066,6 +1351,12 @@ def run_ablation(args: argparse.Namespace) -> pd.DataFrame:
         "itk_demons":        lambda: run_itk_demons(**shared_kwargs),
         "orb_ransac":        lambda: run_orb_ransac(**shared_kwargs),
         "akaze_ransac":      lambda: run_akaze_ransac(**shared_kwargs),
+        # ── Point-based methods ──────────────────────────────────────────
+        "sift_ransac":       lambda: run_sift_ransac(**shared_kwargs),
+        "icp":               lambda: run_icp(**shared_kwargs),
+        "cpd_rigid":         lambda: run_cpd_rigid(**shared_kwargs),
+        "cpd_affine":        lambda: run_cpd_affine(**shared_kwargs),
+        "cpd_nonrigid":      lambda: run_cpd_nonrigid(**shared_kwargs),
     }
 
     for method_key in methods_to_run:
@@ -1152,7 +1443,10 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="METHOD",
         help=(
             "Which methods to run. Pass 'all' (default) or a subset:\n"
-            "  " + "  ".join(ALL_METHODS)
+            "  CORE ablation : baseline rigid_only elastic_only core_coarse core_full\n"
+            "  SOTA          : phase_correlation itk_rigid_mi itk_demons\n"
+            "                  orb_ransac akaze_ransac sift_ransac\n"
+            "  Point-based   : icp cpd_rigid cpd_affine cpd_nonrigid"
         ),
     )
     p.add_argument(
