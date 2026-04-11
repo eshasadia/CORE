@@ -1,0 +1,300 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visualization &mdash; CORE 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Contributing" href="../contributing.html" />
+    <link rel="prev" title="Utilities" href="utils.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            CORE
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="core.html">core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="preprocessing.html">Preprocessing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="registration.html">Registration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="evaluation.html">Evaluation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Visualization</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.create_detailed_nuclei_plot_with_colormaps"><code class="docutils literal notranslate"><span class="pre">create_detailed_nuclei_plot_with_colormaps()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.create_method_comparison_plot"><code class="docutils literal notranslate"><span class="pre">create_method_comparison_plot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.create_nuclei_overlay_plot"><code class="docutils literal notranslate"><span class="pre">create_nuclei_overlay_plot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.create_registration_comparison_plot"><code class="docutils literal notranslate"><span class="pre">create_registration_comparison_plot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.setup_bokeh_notebook"><code class="docutils literal notranslate"><span class="pre">setup_bokeh_notebook()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.show_plot"><code class="docutils literal notranslate"><span class="pre">show_plot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.visualize_cluster_alignment"><code class="docutils literal notranslate"><span class="pre">visualize_cluster_alignment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.visualize_overlays"><code class="docutils literal notranslate"><span class="pre">visualize_overlays()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.visualize_patches"><code class="docutils literal notranslate"><span class="pre">visualize_patches()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.visualize_shape_aware_registration"><code class="docutils literal notranslate"><span class="pre">visualize_shape_aware_registration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.visualization.visualization.visualize_transformed_image"><code class="docutils literal notranslate"><span class="pre">visualize_transformed_image()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">CORE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">API Reference</a></li>
+      <li class="breadcrumb-item active">Visualization</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/visualization.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-core.visualization.visualization">
+<span id="visualization"></span><h1>Visualization<a class="headerlink" href="#module-core.visualization.visualization" title="Link to this heading"></a></h1>
+<p>Visualization functions for CORE registration results</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.create_detailed_nuclei_plot_with_colormaps">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">create_detailed_nuclei_plot_with_colormaps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">moving_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_df</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#create_detailed_nuclei_plot_with_colormaps"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.create_detailed_nuclei_plot_with_colormaps" title="Link to this definition"></a></dt>
+<dd><p>Create detailed nuclei plot with color mapping by area</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>moving_df</strong> – Moving nuclei DataFrame</p></li>
+<li><p><strong>fixed_df</strong> – Fixed nuclei DataFrame</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Bokeh figure object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.create_method_comparison_plot">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">create_method_comparison_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fixed_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">icp_registered_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape_aware_registered_df</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#create_method_comparison_plot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.create_method_comparison_plot" title="Link to this definition"></a></dt>
+<dd><p>Create comparison plot between ICP and Shape-Aware registration methods</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fixed_df</strong> – Fixed nuclei DataFrame</p></li>
+<li><p><strong>moving_df</strong> – Original moving nuclei DataFrame</p></li>
+<li><p><strong>icp_registered_df</strong> – ICP registered moving nuclei DataFrame</p></li>
+<li><p><strong>shape_aware_registered_df</strong> – Shape-aware registered moving nuclei DataFrame</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Bokeh figure object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.create_nuclei_overlay_plot">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">create_nuclei_overlay_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">moving_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Fixed</span> <span class="pre">vs</span> <span class="pre">Moving</span> <span class="pre">Nuclei</span> <span class="pre">Coordinates'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#create_nuclei_overlay_plot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.create_nuclei_overlay_plot" title="Link to this definition"></a></dt>
+<dd><p>Create interactive Bokeh plot for nuclei coordinates overlay</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>moving_df</strong> – DataFrame with moving nuclei coordinates</p></li>
+<li><p><strong>fixed_df</strong> – DataFrame with fixed nuclei coordinates</p></li>
+<li><p><strong>title</strong> – Plot title</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Bokeh figure object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.create_registration_comparison_plot">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">create_registration_comparison_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fixed_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_rigid_df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_nonrigid_df</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#create_registration_comparison_plot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.create_registration_comparison_plot" title="Link to this definition"></a></dt>
+<dd><p>Create comparison plot showing original, rigid, and non-rigid registration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fixed_df</strong> – Fixed nuclei DataFrame</p></li>
+<li><p><strong>moving_df</strong> – Original moving nuclei DataFrame</p></li>
+<li><p><strong>moving_rigid_df</strong> – Rigid registered moving nuclei DataFrame</p></li>
+<li><p><strong>moving_nonrigid_df</strong> – Non-rigid registered moving nuclei DataFrame (optional)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Bokeh figure object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.setup_bokeh_notebook">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">setup_bokeh_notebook</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#setup_bokeh_notebook"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.setup_bokeh_notebook" title="Link to this definition"></a></dt>
+<dd><p>Setup Bokeh for notebook output</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.show_plot">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">show_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plot</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#show_plot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.show_plot" title="Link to this definition"></a></dt>
+<dd><p>Display a Bokeh plot</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>plot</strong> – Bokeh figure object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.visualize_cluster_alignment">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">visualize_cluster_alignment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fixed_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_updated</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_df</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_df</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(10,</span> <span class="pre">10)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Cluster</span> <span class="pre">Centers:</span> <span class="pre">Fixed,</span> <span class="pre">Original</span> <span class="pre">Moving,</span> <span class="pre">and</span> <span class="pre">Transformed'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#visualize_cluster_alignment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.visualize_cluster_alignment" title="Link to this definition"></a></dt>
+<dd><p>Visualize and optionally save the alignment between fixed, moving, and transformed cluster centers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fixed_points</strong> (<em>np.ndarray</em>) – Array of fixed cluster centers with shape (N, 2).</p></li>
+<li><p><strong>moving_points</strong> (<em>np.ndarray</em>) – Array of original moving cluster centers with shape (N, 2).</p></li>
+<li><p><strong>moving_updated</strong> (<em>np.ndarray</em>) – Array of transformed (aligned) moving cluster centers with shape (N, 2).</p></li>
+<li><p><strong>fixed_df</strong> (<em>pandas.DataFrame</em><em>, </em><em>optional</em>) – DataFrame to update with fixed point coordinates.</p></li>
+<li><p><strong>moving_df</strong> (<em>pandas.DataFrame</em><em>, </em><em>optional</em>) – DataFrame to update with moving point coordinates.</p></li>
+<li><p><strong>figsize</strong> (<em>tuple</em><em>, </em><em>default=</em><em>(</em><em>10</em><em>, </em><em>10</em><em>)</em>) – Figure size for the plot.</p></li>
+<li><p><strong>title</strong> (<em>str</em><em>, </em><em>optional</em>) – Title for the plot.</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em>, </em><em>optional</em>) – Path to save the plot (e.g., “results/alignment_plot.png”). If None, the plot is just shown.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>fixed_df, moving_df</strong> – Updated DataFrames if provided, else None.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.visualize_overlays">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">visualize_overlays</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fixed_tile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_tile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transformed_tile</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#visualize_overlays"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.visualize_overlays" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.visualize_patches">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">visualize_patches</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fixed_tile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_tile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transformed_tile</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#visualize_patches"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.visualize_patches" title="Link to this definition"></a></dt>
+<dd><p>Visualize fixed, moving, and transformed image patches</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fixed_tile</strong> – Fixed image patch</p></li>
+<li><p><strong>moving_tile</strong> – Moving image patch</p></li>
+<li><p><strong>transformed_tile</strong> – Transformed image patch</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.visualize_shape_aware_registration">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">visualize_shape_aware_registration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">registrator_obj</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Shape-Aware</span> <span class="pre">Point</span> <span class="pre">Set</span> <span class="pre">Registration'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#visualize_shape_aware_registration"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.visualize_shape_aware_registration" title="Link to this definition"></a></dt>
+<dd><p>Visualize shape-aware registration results using the built-in method</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>registrator_obj</strong> – ShapeAwarePointSetRegistration object after registration</p></li>
+<li><p><strong>title</strong> – Plot title</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Bokeh figure object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.visualization.visualization.visualize_transformed_image">
+<span class="sig-prename descclassname"><span class="pre">core.visualization.visualization.</span></span><span class="sig-name descname"><span class="pre">visualize_transformed_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transformed_image</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/visualization/visualization.html#visualize_transformed_image"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.visualization.visualization.visualize_transformed_image" title="Link to this definition"></a></dt>
+<dd><p>Display transformed image using matplotlib</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>transformed_image</strong> – Transformed image array</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="utils.html" class="btn btn-neutral float-left" title="Utilities" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../contributing.html" class="btn btn-neutral float-right" title="Contributing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Esha Sadia Nasir et al..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

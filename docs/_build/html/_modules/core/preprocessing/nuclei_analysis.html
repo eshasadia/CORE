@@ -1,0 +1,347 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>core.preprocessing.nuclei_analysis &mdash; CORE 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            CORE
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributing.html">Contributing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">CORE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">core.preprocessing.nuclei_analysis</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for core.preprocessing.nuclei_analysis</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Nuclei detection and analysis functions (tissue-aware, watershed-based)</span>
+<span class="sd">with accurate area estimation.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
+<span class="kn">from</span> <span class="nn">skimage.filters</span> <span class="kn">import</span> <span class="n">threshold_local</span>
+<span class="kn">from</span> <span class="nn">skimage.morphology</span> <span class="kn">import</span> <span class="n">h_maxima</span><span class="p">,</span> <span class="n">h_minima</span>
+<span class="kn">from</span> <span class="nn">skimage.segmentation</span> <span class="kn">import</span> <span class="n">watershed</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="kn">import</span> <span class="n">ndimage</span> <span class="k">as</span> <span class="n">ndi</span>
+<span class="kn">from</span> <span class="nn">tiatoolbox.tools</span> <span class="kn">import</span> <span class="n">patchextraction</span>
+<span class="kn">from</span> <span class="nn">tiatoolbox.tools.registration.wsi_registration</span> <span class="kn">import</span> <span class="n">AffineWSITransformer</span>
+<span class="kn">import</span> <span class="nn">core.utils.util</span> <span class="k">as</span> <span class="nn">util</span>
+<span class="kn">from</span> <span class="nn">core.config</span> <span class="kn">import</span> <span class="n">FIXED_THRESHOLD</span><span class="p">,</span> <span class="n">MOVING_THRESHOLD</span><span class="p">,</span> <span class="n">MIN_NUCLEI_AREA</span><span class="p">,</span> <span class="n">GAMMA_CORRECTION</span>
+<span class="kn">from</span> <span class="nn">core.preprocessing.preprocessing</span> <span class="kn">import</span> <span class="n">process_nuclei_patch</span>
+
+
+<span class="c1"># -----------------------------</span>
+<span class="c1"># Patch extraction</span>
+<span class="c1"># -----------------------------</span>
+<div class="viewcode-block" id="extract_patches_from_wsi">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.extract_patches_from_wsi">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_patches_from_wsi</span><span class="p">(</span><span class="n">wsi</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="n">patch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">1000</span><span class="p">),</span> <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">1000</span><span class="p">)):</span>
+    <span class="n">patch_extractor</span> <span class="o">=</span> <span class="n">patchextraction</span><span class="o">.</span><span class="n">get_patch_extractor</span><span class="p">(</span>
+        <span class="n">input_img</span><span class="o">=</span><span class="n">wsi</span><span class="p">,</span>
+        <span class="n">method_name</span><span class="o">=</span><span class="s2">&quot;slidingwindow&quot;</span><span class="p">,</span>
+        <span class="n">patch_size</span><span class="o">=</span><span class="n">patch_size</span><span class="p">,</span>
+        <span class="n">input_mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+        <span class="n">stride</span><span class="o">=</span><span class="n">stride</span><span class="p">,</span>
+        <span class="n">resolution</span><span class="o">=</span><span class="mi">0</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">patch_extractor</span></div>
+
+
+
+<span class="c1"># -----------------------------</span>
+<span class="c1"># Watershed-based nuclei detection with area</span>
+<span class="c1"># -----------------------------</span>
+<div class="viewcode-block" id="detect_nuclei_patch_watershed">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.detect_nuclei_patch_watershed">[docs]</a>
+<span class="k">def</span> <span class="nf">detect_nuclei_patch_watershed</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">min_area</span><span class="o">=</span><span class="mi">25</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Detect nuclei in a patch using watershed and estimate area via contours.</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        nuclei_stats: list of dicts {&#39;area&#39;: area}</span>
+<span class="sd">        nuclei_centroids: np.array of centroids [[x1, y1], [x2, y2], ...]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">gray</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_RGB2GRAY</span><span class="p">)</span>
+    <span class="n">gray_smooth</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">GaussianBlur</span><span class="p">(</span><span class="n">gray</span><span class="p">,</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1"># Adaptive threshold</span>
+    <span class="n">block_size</span> <span class="o">=</span> <span class="mi">51</span>
+    <span class="n">adaptive_thresh</span> <span class="o">=</span> <span class="n">threshold_local</span><span class="p">(</span><span class="n">gray_smooth</span><span class="p">,</span> <span class="n">block_size</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+    <span class="n">binary</span> <span class="o">=</span> <span class="n">gray</span> <span class="o">&lt;</span> <span class="n">adaptive_thresh</span>
+
+    <span class="c1"># Distance transform and watershed</span>
+    <span class="n">distance</span> <span class="o">=</span> <span class="n">ndi</span><span class="o">.</span><span class="n">distance_transform_edt</span><span class="p">(</span><span class="n">binary</span><span class="p">)</span>
+    <span class="n">markers</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">ndi</span><span class="o">.</span><span class="n">label</span><span class="p">(</span><span class="n">binary</span><span class="p">)</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">watershed</span><span class="p">(</span><span class="o">-</span><span class="n">distance</span><span class="p">,</span> <span class="n">markers</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">binary</span><span class="p">)</span>
+
+    <span class="n">nuclei_stats</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">nuclei_centroids</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">labels</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>  <span class="c1"># skip background</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">(</span><span class="n">labels</span> <span class="o">==</span> <span class="n">label</span><span class="p">)</span>
+        <span class="n">contours</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">findContours</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">RETR_EXTERNAL</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">CHAIN_APPROX_SIMPLE</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">contours</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">contour</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">contours</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">cv2</span><span class="o">.</span><span class="n">contourArea</span><span class="p">)</span>
+        <span class="n">area</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">contourArea</span><span class="p">(</span><span class="n">contour</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">area</span> <span class="o">&lt;</span> <span class="n">min_area</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">moments</span><span class="p">(</span><span class="n">contour</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">M</span><span class="p">[</span><span class="s2">&quot;m00&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">cx</span> <span class="o">=</span> <span class="n">M</span><span class="p">[</span><span class="s2">&quot;m10&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">M</span><span class="p">[</span><span class="s2">&quot;m00&quot;</span><span class="p">]</span>
+        <span class="n">cy</span> <span class="o">=</span> <span class="n">M</span><span class="p">[</span><span class="s2">&quot;m01&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">M</span><span class="p">[</span><span class="s2">&quot;m00&quot;</span><span class="p">]</span>
+        <span class="n">nuclei_centroids</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">cx</span><span class="p">,</span> <span class="n">cy</span><span class="p">])</span>
+        <span class="n">nuclei_stats</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s1">&#39;area&#39;</span><span class="p">:</span> <span class="n">area</span><span class="p">})</span>
+
+    <span class="k">return</span> <span class="n">nuclei_stats</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">nuclei_centroids</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># -----------------------------</span>
+<span class="c1"># Patch processing</span>
+<span class="c1"># -----------------------------</span>
+<div class="viewcode-block" id="process_fixed_patch">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.process_fixed_patch">[docs]</a>
+<span class="k">def</span> <span class="nf">process_fixed_patch</span><span class="p">(</span><span class="n">patch_extractor</span><span class="p">,</span> <span class="n">patch_idx</span><span class="p">):</span>
+    <span class="n">fixed_img</span> <span class="o">=</span> <span class="n">patch_extractor</span><span class="p">[</span><span class="n">patch_idx</span><span class="p">]</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">patch_extractor</span><span class="o">.</span><span class="n">coordinate_list</span><span class="p">[</span><span class="n">patch_idx</span><span class="p">]</span>
+    
+    <span class="n">fixed_stats</span><span class="p">,</span> <span class="n">fixed_centroids</span> <span class="o">=</span> <span class="n">detect_nuclei_patch_watershed</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">min_area</span><span class="o">=</span><span class="n">MIN_NUCLEI_AREA</span><span class="p">)</span>
+    
+    <span class="n">nuclei_data</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">centroid</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">fixed_centroids</span><span class="p">):</span>
+        <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">centroid</span>
+        <span class="n">global_x</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">x</span>
+        <span class="n">global_y</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">y</span>
+        <span class="n">nuclei_data</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+            <span class="s1">&#39;patch_id&#39;</span><span class="p">:</span> <span class="n">patch_idx</span><span class="p">,</span>
+            <span class="s1">&#39;patch_x1&#39;</span><span class="p">:</span> <span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="s1">&#39;patch_y1&#39;</span><span class="p">:</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="s1">&#39;patch_x2&#39;</span><span class="p">:</span> <span class="n">coords</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+            <span class="s1">&#39;patch_y2&#39;</span><span class="p">:</span> <span class="n">coords</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+            <span class="s1">&#39;local_x&#39;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span>
+            <span class="s1">&#39;local_y&#39;</span><span class="p">:</span> <span class="n">y</span><span class="p">,</span>
+            <span class="s1">&#39;global_x&#39;</span><span class="p">:</span> <span class="n">global_x</span><span class="p">,</span>
+            <span class="s1">&#39;global_y&#39;</span><span class="p">:</span> <span class="n">global_y</span><span class="p">,</span>
+            <span class="s1">&#39;area&#39;</span><span class="p">:</span> <span class="n">fixed_stats</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s1">&#39;area&#39;</span><span class="p">]</span>
+        <span class="p">})</span>
+    <span class="k">return</span> <span class="n">nuclei_data</span></div>
+
+
+
+<div class="viewcode-block" id="process_moving_patch">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.process_moving_patch">[docs]</a>
+<span class="k">def</span> <span class="nf">process_moving_patch</span><span class="p">(</span><span class="n">patch_extractor</span><span class="p">,</span> <span class="n">tfm</span><span class="p">,</span> <span class="n">patch_idx</span><span class="p">):</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">patch_extractor</span><span class="o">.</span><span class="n">coordinate_list</span><span class="p">[</span><span class="n">patch_idx</span><span class="p">]</span>
+    <span class="n">location</span> <span class="o">=</span> <span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coords</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">-</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    
+    <span class="n">moving_img</span> <span class="o">=</span> <span class="n">tfm</span><span class="o">.</span><span class="n">read_rect</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">resolution</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">&quot;power&quot;</span><span class="p">)</span>
+    <span class="n">moving_stats</span><span class="p">,</span> <span class="n">moving_centroids</span> <span class="o">=</span> <span class="n">detect_nuclei_patch_watershed</span><span class="p">(</span><span class="n">moving_img</span><span class="p">,</span> <span class="n">min_area</span><span class="o">=</span><span class="n">MIN_NUCLEI_AREA</span><span class="p">)</span>
+    
+    <span class="n">nuclei_data</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">centroid</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">moving_centroids</span><span class="p">):</span>
+        <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">centroid</span>
+        <span class="n">global_x</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">x</span>
+        <span class="n">global_y</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">y</span>
+        <span class="n">nuclei_data</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+            <span class="s1">&#39;patch_id&#39;</span><span class="p">:</span> <span class="n">patch_idx</span><span class="p">,</span>
+            <span class="s1">&#39;patch_x1&#39;</span><span class="p">:</span> <span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="s1">&#39;patch_y1&#39;</span><span class="p">:</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="s1">&#39;patch_x2&#39;</span><span class="p">:</span> <span class="n">coords</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+            <span class="s1">&#39;patch_y2&#39;</span><span class="p">:</span> <span class="n">coords</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+            <span class="s1">&#39;local_x&#39;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span>
+            <span class="s1">&#39;local_y&#39;</span><span class="p">:</span> <span class="n">y</span><span class="p">,</span>
+            <span class="s1">&#39;global_x&#39;</span><span class="p">:</span> <span class="n">global_x</span><span class="p">,</span>
+            <span class="s1">&#39;global_y&#39;</span><span class="p">:</span> <span class="n">global_y</span><span class="p">,</span>
+            <span class="s1">&#39;area&#39;</span><span class="p">:</span> <span class="n">moving_stats</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s1">&#39;area&#39;</span><span class="p">]</span>
+        <span class="p">})</span>
+    <span class="k">return</span> <span class="n">nuclei_data</span></div>
+
+
+
+<span class="k">def</span> <span class="nf">_process_patch_pair</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Process a single (fixed, moving) patch pair; used by the thread pool.&quot;&quot;&quot;</span>
+    <span class="n">fixed_patch_extractor</span><span class="p">,</span> <span class="n">tfm</span><span class="p">,</span> <span class="n">patch_idx</span> <span class="o">=</span> <span class="n">args</span>
+    <span class="n">fixed_nuclei</span><span class="p">,</span> <span class="n">moving_nuclei</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">fixed_nuclei</span> <span class="o">=</span> <span class="n">process_fixed_patch</span><span class="p">(</span><span class="n">fixed_patch_extractor</span><span class="p">,</span> <span class="n">patch_idx</span><span class="p">)</span>
+        <span class="n">moving_nuclei</span> <span class="o">=</span> <span class="n">process_moving_patch</span><span class="p">(</span><span class="n">fixed_patch_extractor</span><span class="p">,</span> <span class="n">tfm</span><span class="p">,</span> <span class="n">patch_idx</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error processing patch </span><span class="si">{</span><span class="n">patch_idx</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">fixed_nuclei</span><span class="p">,</span> <span class="n">moving_nuclei</span>
+
+
+<div class="viewcode-block" id="process_nuclei_in_patches">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.process_nuclei_in_patches">[docs]</a>
+<span class="k">def</span> <span class="nf">process_nuclei_in_patches</span><span class="p">(</span><span class="n">fixed_patch_extractor</span><span class="p">,</span> <span class="n">tfm</span><span class="p">,</span> <span class="n">start_index</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">end_index</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">end_index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">end_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">fixed_patch_extractor</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+    <span class="n">patch_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">start_index</span><span class="p">,</span> <span class="n">end_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">args_list</span> <span class="o">=</span> <span class="p">[(</span><span class="n">fixed_patch_extractor</span><span class="p">,</span> <span class="n">tfm</span><span class="p">,</span> <span class="n">idx</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">patch_indices</span><span class="p">]</span>
+
+    <span class="n">all_fixed_nuclei_data</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">all_moving_nuclei_data</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># Use ThreadPoolExecutor: I/O-bound WSI reads benefit from threads without pickling overhead</span>
+    <span class="n">max_workers</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">cpu_count</span><span class="p">()</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">patch_indices</span><span class="p">))</span>
+    <span class="k">with</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">max_workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">executor</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">fixed_nuclei</span><span class="p">,</span> <span class="n">moving_nuclei</span> <span class="ow">in</span> <span class="n">executor</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_process_patch_pair</span><span class="p">,</span> <span class="n">args_list</span><span class="p">):</span>
+            <span class="n">all_fixed_nuclei_data</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">fixed_nuclei</span><span class="p">)</span>
+            <span class="n">all_moving_nuclei_data</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">moving_nuclei</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">all_fixed_nuclei_data</span><span class="p">,</span> <span class="n">all_moving_nuclei_data</span></div>
+
+
+
+<span class="c1"># -----------------------------</span>
+<span class="c1"># CSV utilities</span>
+<span class="c1"># -----------------------------</span>
+<div class="viewcode-block" id="save_nuclei_data_to_csv">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.save_nuclei_data_to_csv">[docs]</a>
+<span class="k">def</span> <span class="nf">save_nuclei_data_to_csv</span><span class="p">(</span><span class="n">fixed_nuclei_data</span><span class="p">,</span> <span class="n">moving_nuclei_data</span><span class="p">,</span> 
+                            <span class="n">fixed_csv_path</span><span class="p">,</span> <span class="n">moving_csv_path</span><span class="p">):</span>
+    <span class="n">fixed_nuclei_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">fixed_nuclei_data</span><span class="p">)</span>
+    <span class="n">moving_nuclei_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">moving_nuclei_data</span><span class="p">)</span>
+    
+    <span class="n">fixed_nuclei_df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">fixed_csv_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">moving_nuclei_df</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">moving_csv_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Saved </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">fixed_nuclei_data</span><span class="p">)</span><span class="si">}</span><span class="s2"> fixed nuclei to </span><span class="si">{</span><span class="n">fixed_csv_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Saved </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">moving_nuclei_data</span><span class="p">)</span><span class="si">}</span><span class="s2"> moving nuclei to </span><span class="si">{</span><span class="n">moving_csv_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="load_nuclei_coordinates">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.load_nuclei_coordinates">[docs]</a>
+<span class="k">def</span> <span class="nf">load_nuclei_coordinates</span><span class="p">(</span><span class="n">csv_path</span><span class="p">):</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">csv_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s1">&#39;area&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">df</span><span class="p">[</span><span class="s1">&#39;area&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="k">return</span> <span class="n">df</span></div>
+
+
+
+<div class="viewcode-block" id="extract_nuclei_points">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.extract_nuclei_points">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_nuclei_points</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;global_x&#39;</span><span class="p">,</span> <span class="s1">&#39;global_y&#39;</span><span class="p">]):</span>
+    <span class="k">return</span> <span class="n">df</span><span class="p">[</span><span class="n">columns</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="subsample_nuclei">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.subsample_nuclei">[docs]</a>
+<span class="k">def</span> <span class="nf">subsample_nuclei</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">n_samples</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">df</span>
+    <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">)</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="create_nuclei_dataframe_from_points">
+<a class="viewcode-back" href="../../../api/preprocessing.html#core.preprocessing.nuclei_analysis.create_nuclei_dataframe_from_points">[docs]</a>
+<span class="k">def</span> <span class="nf">create_nuclei_dataframe_from_points</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">area_values</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;global_x&#39;</span><span class="p">,</span> <span class="s1">&#39;global_y&#39;</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">area_values</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">df</span><span class="p">[</span><span class="s1">&#39;area&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">area_values</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">df</span><span class="p">[</span><span class="s1">&#39;area&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="k">return</span> <span class="n">df</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Esha Sadia Nasir et al..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
