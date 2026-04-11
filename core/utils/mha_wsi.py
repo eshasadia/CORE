@@ -343,11 +343,8 @@ def register_wsi_with_mha(
         warped_arr = vips_to_array(warped)
         sitk_img = sitk.GetImageFromArray(warped_arr)
         sitk.WriteImage(sitk_img, output_path, useCompression=True)
-    elif ext in ['.tiff', '.tif']:
-        # Save as TIFF with pyvips
-        warped.write_to_file(output_path, compression='lzw')
-    elif ext == '.ome.tiff' or output_path.endswith('.ome.tiff'):
-        # Save as OME-TIFF (pyramidal)
+    elif output_path.endswith('.ome.tiff') or output_path.endswith('.ome.tif'):
+        # Save as OME-TIFF (pyramidal) — must be checked before plain .tiff
         warped.write_to_file(
             output_path,
             tile=True,
@@ -356,6 +353,9 @@ def register_wsi_with_mha(
             tile_width=256,
             tile_height=256
         )
+    elif ext in ['.tiff', '.tif']:
+        # Save as TIFF with pyvips
+        warped.write_to_file(output_path, compression='lzw')
     else:
         # Default: save with pyvips
         warped.write_to_file(output_path)
