@@ -1,0 +1,620 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preprocessing &mdash; CORE 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Registration" href="registration.html" />
+    <link rel="prev" title="core" href="core.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            CORE
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="core.html">core</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Preprocessing</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.adjust_gamma"><code class="docutils literal notranslate"><span class="pre">adjust_gamma()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.extract_tissue_masks"><code class="docutils literal notranslate"><span class="pre">extract_tissue_masks()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.gamma_corrections"><code class="docutils literal notranslate"><span class="pre">gamma_corrections()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.load_slide"><code class="docutils literal notranslate"><span class="pre">load_slide()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.load_wsi_images"><code class="docutils literal notranslate"><span class="pre">load_wsi_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.pad_images_np"><code class="docutils literal notranslate"><span class="pre">pad_images_np()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.pad_single"><code class="docutils literal notranslate"><span class="pre">pad_single()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.pad_to_same_size"><code class="docutils literal notranslate"><span class="pre">pad_to_same_size()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.preprocess_images"><code class="docutils literal notranslate"><span class="pre">preprocess_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.process_nuclei_patch"><code class="docutils literal notranslate"><span class="pre">process_nuclei_patch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.resize_and_compute_translation"><code class="docutils literal notranslate"><span class="pre">resize_and_compute_translation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.preprocessing.scale_transformation_matrix"><code class="docutils literal notranslate"><span class="pre">scale_transformation_matrix()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.tissuemask.FlorenceTissueMaskExtractor"><code class="docutils literal notranslate"><span class="pre">FlorenceTissueMaskExtractor</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.tissuemask.FlorenceTissueMaskExtractor.extract"><code class="docutils literal notranslate"><span class="pre">FlorenceTissueMaskExtractor.extract()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor"><code class="docutils literal notranslate"><span class="pre">UNetTissueMaskExtractor</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor.__init__"><code class="docutils literal notranslate"><span class="pre">UNetTissueMaskExtractor.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor.convert_pytorch_checkpoint"><code class="docutils literal notranslate"><span class="pre">UNetTissueMaskExtractor.convert_pytorch_checkpoint()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor.extract_masks"><code class="docutils literal notranslate"><span class="pre">UNetTissueMaskExtractor.extract_masks()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor.post_processing_mask"><code class="docutils literal notranslate"><span class="pre">UNetTissueMaskExtractor.post_processing_mask()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.create_nuclei_dataframe_from_points"><code class="docutils literal notranslate"><span class="pre">create_nuclei_dataframe_from_points()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.detect_nuclei_patch_watershed"><code class="docutils literal notranslate"><span class="pre">detect_nuclei_patch_watershed()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.extract_nuclei_points"><code class="docutils literal notranslate"><span class="pre">extract_nuclei_points()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.extract_patches_from_wsi"><code class="docutils literal notranslate"><span class="pre">extract_patches_from_wsi()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.load_nuclei_coordinates"><code class="docutils literal notranslate"><span class="pre">load_nuclei_coordinates()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.process_fixed_patch"><code class="docutils literal notranslate"><span class="pre">process_fixed_patch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.process_moving_patch"><code class="docutils literal notranslate"><span class="pre">process_moving_patch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.process_nuclei_in_patches"><code class="docutils literal notranslate"><span class="pre">process_nuclei_in_patches()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.save_nuclei_data_to_csv"><code class="docutils literal notranslate"><span class="pre">save_nuclei_data_to_csv()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.nuclei_analysis.subsample_nuclei"><code class="docutils literal notranslate"><span class="pre">subsample_nuclei()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer"><code class="docutils literal notranslate"><span class="pre">StainNormalizer</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.__init__"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.__init__()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.compute_svd"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.compute_svd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.extract_H_E"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.extract_H_E()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.find_stain_vectors"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.find_stain_vectors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.process"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.process()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.read_image"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.read_image()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.recreate_image"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.recreate_image()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.remove_transparent_pixels"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.remove_transparent_pixels()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.rgb_to_od"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.rgb_to_od()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.preprocessing.stainnorm.StainNormalizer.separate_stains"><code class="docutils literal notranslate"><span class="pre">StainNormalizer.separate_stains()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.padding.apply_padding_landmarks"><code class="docutils literal notranslate"><span class="pre">apply_padding_landmarks()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.padding.calculate_pad_value"><code class="docutils literal notranslate"><span class="pre">calculate_pad_value()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.padding.pad_image_src"><code class="docutils literal notranslate"><span class="pre">pad_image_src()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.padding.pad_images"><code class="docutils literal notranslate"><span class="pre">pad_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.padding.pad_landmarks"><code class="docutils literal notranslate"><span class="pre">pad_landmarks()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.preprocessing.padding.remove_padding"><code class="docutils literal notranslate"><span class="pre">remove_padding()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="registration.html">Registration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="evaluation.html">Evaluation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="visualization.html">Visualization</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing.html">Contributing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">CORE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">API Reference</a></li>
+      <li class="breadcrumb-item active">Preprocessing</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/preprocessing.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-core.preprocessing.preprocessing">
+<span id="preprocessing"></span><h1>Preprocessing<a class="headerlink" href="#module-core.preprocessing.preprocessing" title="Link to this heading"></a></h1>
+<p>Preprocessing functions for WSI registration</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.adjust_gamma">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">adjust_gamma</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gamma</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#adjust_gamma"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.adjust_gamma" title="Link to this definition"></a></dt>
+<dd><p>Apply gamma correction to an image</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image</strong> – Input image</p></li>
+<li><p><strong>gamma</strong> – Gamma value</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Gamma corrected image</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.extract_tissue_masks">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">extract_tissue_masks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source_prep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_prep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">artefacts</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#extract_tissue_masks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.extract_tissue_masks" title="Link to this definition"></a></dt>
+<dd><p>Extract tissue masks from preprocessed images</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source_prep</strong> – Preprocessed source image</p></li>
+<li><p><strong>target_prep</strong> – Preprocessed target image</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(source_mask, target_mask)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.gamma_corrections">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">gamma_corrections</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gamma</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#gamma_corrections"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.gamma_corrections" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.load_slide">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">load_slide</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_path_1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resolution</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.625</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#load_slide"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.load_slide" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.load_wsi_images">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">load_wsi_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resolution</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.625</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obj_power</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#load_wsi_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.load_wsi_images" title="Link to this definition"></a></dt>
+<dd><p>Load source and target WSI images</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source_path</strong> – Path to source WSI</p></li>
+<li><p><strong>target_path</strong> – Path to target WSI</p></li>
+<li><p><strong>resolution</strong> – Resolution for loading</p></li>
+<li><p><strong>data</strong> – Dataset type (e.g. ‘anhir’)</p></li>
+<li><p><strong>obj_power</strong> – Objective power for VirtualWSIReader</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(source_wsi, target_wsi, source_image, target_image)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>FileNotFoundError</strong> – If either WSI path does not exist on disk.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.pad_images_np">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">pad_images_np</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#pad_images_np"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.pad_images_np" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.pad_single">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">pad_single</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_shape</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#pad_single"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.pad_single" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.pad_to_same_size">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">pad_to_same_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#pad_to_same_size"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.pad_to_same_size" title="Link to this definition"></a></dt>
+<dd><p>Pad two images to the same size.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_1</strong> – First image array with shape (height, width, channel), (batch, height, width, channel),
+(height, width), or (batch, channel, height, width)</p></li>
+<li><p><strong>image_2</strong> – Second image array with shape (height, width, channel), (batch, height, width, channel),
+(height, width), or (batch, channel, height, width)</p></li>
+<li><p><strong>pad_value</strong> – Value to use for padding</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(padded_image_1, padded_image_2, padding_params)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.preprocess_images">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">preprocess_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize_stain</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#preprocess_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.preprocess_images" title="Link to this definition"></a></dt>
+<dd><p>Preprocess source and target images.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> – Source image array (RGB, uint8).</p></li>
+<li><p><strong>target</strong> – Target image array (RGB, uint8).</p></li>
+<li><p><strong>normalize_stain</strong> – When True, apply Macenko stain normalization to both
+images so that colour differences caused by staining variation do
+not interfere with the coarse registration step.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(source_prep, target_prep)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.process_nuclei_patch">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">process_nuclei_patch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gamma</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_area</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#process_nuclei_patch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.process_nuclei_patch" title="Link to this definition"></a></dt>
+<dd><p>Process a single patch to detect nuclei</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img</strong> – Input image patch</p></li>
+<li><p><strong>threshold</strong> – Binary threshold value</p></li>
+<li><p><strong>gamma</strong> – Gamma correction value (optional)</p></li>
+<li><p><strong>min_area</strong> – Minimum area for nuclei detection</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>(binary_image, stats, centroids)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.resize_and_compute_translation">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">resize_and_compute_translation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">moving_image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_image</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#resize_and_compute_translation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.resize_and_compute_translation" title="Link to this definition"></a></dt>
+<dd><p>Resizes fixed and moving images to the maximum dimensions using black padding
+and computes initial translation offsets for 2D or 3D images (where the 3rd dimension is the channel).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fixed_image</strong> (<em>np.ndarray</em>) – The fixed image (2D or 3D).</p></li>
+<li><p><strong>moving_image</strong> (<em>np.ndarray</em>) – The moving image (2D or 3D).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The fixed image with padding.
+moving_padded (np.ndarray): The moving image with padding.
+translation (tuple): The translation offsets (tx, ty) for 2D or (tx, ty, channels) for 3D.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>fixed_padded (np.ndarray)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.preprocessing.scale_transformation_matrix">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.preprocessing.</span></span><span class="sig-name descname"><span class="pre">scale_transformation_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transform_matrix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_res</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_res</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/preprocessing.html#scale_transformation_matrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.preprocessing.scale_transformation_matrix" title="Link to this definition"></a></dt>
+<dd><p>Scale transformation matrix to different resolution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>transform_matrix</strong> – Input transformation matrix</p></li>
+<li><p><strong>input_res</strong> – Input resolution</p></li>
+<li><p><strong>output_res</strong> – Output resolution</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Scaled transformation matrix</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class" id="module-core.preprocessing.tissuemask">
+<dt class="sig sig-object py" id="core.preprocessing.tissuemask.FlorenceTissueMaskExtractor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">core.preprocessing.tissuemask.</span></span><span class="sig-name descname"><span class="pre">FlorenceTissueMaskExtractor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">unet_model_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unet_device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cuda'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/tissuemask.html#FlorenceTissueMaskExtractor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.tissuemask.FlorenceTissueMaskExtractor" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.tissuemask.FlorenceTissueMaskExtractor.extract">
+<span class="sig-name descname"><span class="pre">extract</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">artefacts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="reference internal" href="../_modules/core/preprocessing/tissuemask.html#FlorenceTissueMaskExtractor.extract"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.tissuemask.FlorenceTissueMaskExtractor.extract" title="Link to this definition"></a></dt>
+<dd><p>Extracts the tissue mask from an image using instance segmentation or fallback methods.</p>
+<dl class="simple">
+<dt>Extraction order:</dt><dd><ol class="arabic simple">
+<li><p>Florence-2 + SAM2 prompt-based instance segmentation.</p></li>
+<li><p>If that fails and a UNet model path is provided, the UNet extractor.</p></li>
+<li><p>Final fallback: Otsu threshold with morphological cleanup.</p></li>
+</ol>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image</strong> (<em>np.ndarray</em>) – Input RGB image.</p></li>
+<li><p><strong>artefacts</strong> (<em>bool</em>) – When True, return only the first (largest) segment mask
+so that control tissue artefacts are isolated.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Binary tissue mask (uint8, values 0 or 255).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="core.preprocessing.tissuemask.UNetTissueMaskExtractor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">core.preprocessing.tissuemask.</span></span><span class="sig-name descname"><span class="pre">UNetTissueMaskExtractor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cuda'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/tissuemask.html#UNetTissueMaskExtractor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.tissuemask.UNetTissueMaskExtractor.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cuda'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/tissuemask.html#UNetTissueMaskExtractor.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor.__init__" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model_path</strong> (<em>str</em>) – Path to the pretrained UNet checkpoint.</p></li>
+<li><p><strong>device</strong> (<em>str</em>) – ‘cuda’ or ‘cpu’.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.tissuemask.UNetTissueMaskExtractor.convert_pytorch_checkpoint">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">convert_pytorch_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">net_state_dict</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/tissuemask.html#UNetTissueMaskExtractor.convert_pytorch_checkpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor.convert_pytorch_checkpoint" title="Link to this definition"></a></dt>
+<dd><p>Convert checkpoint from DataParallel to single-GPU format.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.tissuemask.UNetTissueMaskExtractor.extract_masks">
+<span class="sig-name descname"><span class="pre">extract_masks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="reference internal" href="../_modules/core/preprocessing/tissuemask.html#UNetTissueMaskExtractor.extract_masks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor.extract_masks" title="Link to this definition"></a></dt>
+<dd><p>Generate a tissue mask for a single image using UNet segmentation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>image</strong> (<em>np.ndarray</em>) – Input RGB image.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Processed binary tissue mask.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.tissuemask.UNetTissueMaskExtractor.post_processing_mask">
+<span class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">post_processing_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="reference internal" href="../_modules/core/preprocessing/tissuemask.html#UNetTissueMaskExtractor.post_processing_mask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.tissuemask.UNetTissueMaskExtractor.post_processing_mask" title="Link to this definition"></a></dt>
+<dd><p>Fill holes and keep only the largest object in the binary mask.</p>
+</dd></dl>
+
+</dd></dl>
+
+<p id="module-core.preprocessing.nuclei_analysis">Nuclei detection and analysis functions (tissue-aware, watershed-based)
+with accurate area estimation.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.create_nuclei_dataframe_from_points">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">create_nuclei_dataframe_from_points</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">points</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">area_values</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#create_nuclei_dataframe_from_points"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.create_nuclei_dataframe_from_points" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.detect_nuclei_patch_watershed">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">detect_nuclei_patch_watershed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_area</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">25</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#detect_nuclei_patch_watershed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.detect_nuclei_patch_watershed" title="Link to this definition"></a></dt>
+<dd><p>Detect nuclei in a patch using watershed and estimate area via contours.
+:returns: list of dicts {‘area’: area}</p>
+<blockquote>
+<div><p>nuclei_centroids: np.array of centroids [[x1, y1], [x2, y2], …]</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>nuclei_stats</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.extract_nuclei_points">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">extract_nuclei_points</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">columns</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">['global_x',</span> <span class="pre">'global_y']</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#extract_nuclei_points"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.extract_nuclei_points" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.extract_patches_from_wsi">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">extract_patches_from_wsi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wsi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(1000,</span> <span class="pre">1000)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stride</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(1000,</span> <span class="pre">1000)</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#extract_patches_from_wsi"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.extract_patches_from_wsi" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.load_nuclei_coordinates">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">load_nuclei_coordinates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">csv_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#load_nuclei_coordinates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.load_nuclei_coordinates" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.process_fixed_patch">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">process_fixed_patch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">patch_extractor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patch_idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#process_fixed_patch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.process_fixed_patch" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.process_moving_patch">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">process_moving_patch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">patch_extractor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tfm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patch_idx</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#process_moving_patch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.process_moving_patch" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.process_nuclei_in_patches">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">process_nuclei_in_patches</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fixed_patch_extractor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tfm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#process_nuclei_in_patches"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.process_nuclei_in_patches" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.save_nuclei_data_to_csv">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">save_nuclei_data_to_csv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fixed_nuclei_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_nuclei_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fixed_csv_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">moving_csv_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#save_nuclei_data_to_csv"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.save_nuclei_data_to_csv" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.nuclei_analysis.subsample_nuclei">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.nuclei_analysis.</span></span><span class="sig-name descname"><span class="pre">subsample_nuclei</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/nuclei_analysis.html#subsample_nuclei"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.nuclei_analysis.subsample_nuclei" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class" id="module-core.preprocessing.stainnorm">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">core.preprocessing.stainnorm.</span></span><span class="sig-name descname"><span class="pre">StainNormalizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">Io</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">240</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.15</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class to normalize staining appearance of H&amp;E stained images.
+Based on Macenko et al., ISBI 2009 and Vink et al., J Microscopy, 2013.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">Io</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">240</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.15</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.__init__" title="Link to this definition"></a></dt>
+<dd><p>Initialize with default parameters.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.compute_svd">
+<span class="sig-name descname"><span class="pre">compute_svd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ODhat</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.compute_svd"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.compute_svd" title="Link to this definition"></a></dt>
+<dd><p>Computes SVD to find stain vectors.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.extract_H_E">
+<span class="sig-name descname"><span class="pre">extract_H_E</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">C2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.extract_H_E"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.extract_H_E" title="Link to this definition"></a></dt>
+<dd><p>Extracts Hematoxylin and Eosin stain images.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.find_stain_vectors">
+<span class="sig-name descname"><span class="pre">find_stain_vectors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">eigvecs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ODhat</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.find_stain_vectors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.find_stain_vectors" title="Link to this definition"></a></dt>
+<dd><p>Finds the hematoxylin and eosin stain vectors.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.process">
+<span class="sig-name descname"><span class="pre">process</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.process"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.process" title="Link to this definition"></a></dt>
+<dd><p>Main workflow to normalize image and extract stains.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.read_image">
+<span class="sig-name descname"><span class="pre">read_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.read_image"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.read_image" title="Link to this definition"></a></dt>
+<dd><p>Reads and converts an image to RGB.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.recreate_image">
+<span class="sig-name descname"><span class="pre">recreate_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">C2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.recreate_image"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.recreate_image" title="Link to this definition"></a></dt>
+<dd><p>Recreates the normalized image from the separated components.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.remove_transparent_pixels">
+<span class="sig-name descname"><span class="pre">remove_transparent_pixels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">OD</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.remove_transparent_pixels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.remove_transparent_pixels" title="Link to this definition"></a></dt>
+<dd><p>Removes pixels with OD intensity less than beta.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.rgb_to_od">
+<span class="sig-name descname"><span class="pre">rgb_to_od</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.rgb_to_od"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.rgb_to_od" title="Link to this definition"></a></dt>
+<dd><p>Converts RGB image to Optical Density (OD).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.preprocessing.stainnorm.StainNormalizer.separate_stains">
+<span class="sig-name descname"><span class="pre">separate_stains</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">OD</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">HE</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/stainnorm.html#StainNormalizer.separate_stains"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.stainnorm.StainNormalizer.separate_stains" title="Link to this definition"></a></dt>
+<dd><p>Separates the image into Hematoxylin and Eosin components.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function" id="module-core.preprocessing.padding">
+<dt class="sig sig-object py" id="core.preprocessing.padding.apply_padding_landmarks">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.padding.</span></span><span class="sig-name descname"><span class="pre">apply_padding_landmarks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">landmarks</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="reference internal" href="../_modules/core/preprocessing/padding.html#apply_padding_landmarks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.padding.apply_padding_landmarks" title="Link to this definition"></a></dt>
+<dd><p>Applies padding to landmark coordinates.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.padding.calculate_pad_value">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.padding.</span></span><span class="sig-name descname"><span class="pre">calculate_pad_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size_1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size_2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../_modules/core/preprocessing/padding.html#calculate_pad_value"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.padding.calculate_pad_value" title="Link to this definition"></a></dt>
+<dd><p>Calculates the padding required to make two images the same size.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.padding.pad_image_src">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.padding.</span></span><span class="sig-name descname"><span class="pre">pad_image_src</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">255</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../_modules/core/preprocessing/padding.html#pad_image_src"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.padding.pad_image_src" title="Link to this definition"></a></dt>
+<dd><p>Pads or crops the source image so it matches the target’s size.
+Target remains unchanged.</p>
+<p>Positive padding if source &lt; target.
+Negative padding (crop) if source &gt; target.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.padding.pad_images">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.padding.</span></span><span class="sig-name descname"><span class="pre">pad_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../_modules/core/preprocessing/padding.html#pad_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.padding.pad_images" title="Link to this definition"></a></dt>
+<dd><p>Pads two images to the same size and optionally adjusts landmarks accordingly.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.padding.pad_landmarks">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.padding.</span></span><span class="sig-name descname"><span class="pre">pad_landmarks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">padding_params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">landmarks_1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">landmarks_2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../_modules/core/preprocessing/padding.html#pad_landmarks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.padding.pad_landmarks" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.preprocessing.padding.remove_padding">
+<span class="sig-prename descclassname"><span class="pre">core.preprocessing.padding.</span></span><span class="sig-name descname"><span class="pre">remove_padding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_tuple</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/preprocessing/padding.html#remove_padding"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.preprocessing.padding.remove_padding" title="Link to this definition"></a></dt>
+<dd><p>Crop image or deformation field back to original (unpadded) size.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="core.html" class="btn btn-neutral float-left" title="core" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="registration.html" class="btn btn-neutral float-right" title="Registration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Esha Sadia Nasir et al..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -345,7 +345,7 @@ def rigid_registration(moving_img, fixed_img, moving_mask, fixed_mask, verbose=F
     # If no transformation was found (identity), do extra registration
     if np.array_equal(best_transform1, np.eye(3)):
         if verbose:
-        logger.info("Running extra registration with XFeatReg...")
+            logger.info("Running extra registration with XFeatReg...")
         aligner = XFeatReg()
         best_transform1, moving_img_transformed = aligner.register(fixed_img, moving_img)
         best_transform1 = np.vstack((best_transform1, [0, 0, 1]))

@@ -65,8 +65,10 @@ def build_reference_coordinate_system(input_tensor: Optional[torch.Tensor] = Non
 
     return coordinate_grid
 
-                               compute_device: torch.device = torch.device("cuda"),
-                               weight_map: Optional[torch.Tensor] = None) -> torch.Tensor:
+
+def compute_smoothness_regularization(vector_field: "torch.Tensor",
+                               compute_device: "torch.device" = None,
+                               weight_map: "Optional[torch.Tensor]" = None) -> "torch.Tensor":
     dim_count = len(vector_field.size()) - 2
     
     if dim_count == 2:

@@ -1,0 +1,951 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>core.registration.rigid &mdash; CORE 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            CORE
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Quick Start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../configuration.html">Configuration Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributing.html">Contributing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">CORE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">core.registration.rigid</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for core.registration.rigid</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">skimage</span> <span class="kn">import</span> <span class="n">exposure</span>
+<span class="kn">from</span> <span class="nn">skimage</span> <span class="kn">import</span> <span class="n">img_as_float</span>
+<span class="kn">from</span> <span class="nn">skimage.registration</span> <span class="kn">import</span> <span class="n">phase_cross_correlation</span>
+<span class="kn">from</span> <span class="nn">scipy.spatial</span> <span class="kn">import</span> <span class="n">KDTree</span>
+<span class="kn">from</span> <span class="nn">tiatoolbox.utils.metrics</span> <span class="kn">import</span> <span class="n">dice</span>
+<span class="kn">from</span> <span class="nn">tiatoolbox.tools</span> <span class="kn">import</span> <span class="n">patchextraction</span>
+<span class="kn">from</span> <span class="nn">tiatoolbox.tools.registration.wsi_registration</span> <span class="kn">import</span> <span class="n">AffineWSITransformer</span>
+<span class="kn">from</span> <span class="nn">accelerated_features.modules.xfeat</span> <span class="kn">import</span> <span class="n">XFeat</span>
+<span class="kn">import</span> <span class="nn">core.utils.util</span> <span class="k">as</span> <span class="nn">util</span>
+<span class="kn">from</span> <span class="nn">core.evaluation.evaluation</span> <span class="kn">import</span> <span class="n">ngf_metric</span>
+
+
+
+<span class="c1"># Constants</span>
+<span class="n">RGB_IMAGE_DIM</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">BIN_MASK_DIM</span> <span class="o">=</span> <span class="mi">2</span>
+
+<span class="c1"># Configure logger</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+
+
+
+<div class="viewcode-block" id="Trimorph">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.Trimorph">[docs]</a>
+<span class="k">class</span> <span class="nc">Trimorph</span><span class="p">:</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_check_dims</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img</span><span class="p">,</span> <span class="n">fixed_mask</span><span class="p">,</span> <span class="n">moving_mask</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">fixed_mask</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">moving_mask</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The foreground is missing in the mask.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">fixed_img</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">!=</span> <span class="n">fixed_mask</span><span class="o">.</span><span class="n">shape</span>
+            <span class="ow">or</span> <span class="n">moving_img</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">!=</span> <span class="n">moving_mask</span><span class="o">.</span><span class="n">shape</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Mismatch of shape between image and its corresponding mask.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fixed_img</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="n">RGB_IMAGE_DIM</span><span class="p">:</span>
+            <span class="n">fixed_img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2GRAY</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">moving_img</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="n">RGB_IMAGE_DIM</span><span class="p">:</span>
+            <span class="n">moving_img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">moving_img</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2GRAY</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img</span>
+
+<div class="viewcode-block" id="Trimorph.compute_center_of_mass">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.Trimorph.compute_center_of_mass">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">compute_center_of_mass</span><span class="p">(</span><span class="n">mask</span><span class="p">):</span>
+        <span class="n">moments</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">moments</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
+        <span class="n">x_coord_center</span> <span class="o">=</span> <span class="n">moments</span><span class="p">[</span><span class="s2">&quot;m10&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">moments</span><span class="p">[</span><span class="s2">&quot;m00&quot;</span><span class="p">]</span>
+        <span class="n">y_coord_center</span> <span class="o">=</span> <span class="n">moments</span><span class="p">[</span><span class="s2">&quot;m01&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="n">moments</span><span class="p">[</span><span class="s2">&quot;m00&quot;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">x_coord_center</span><span class="p">,</span> <span class="n">y_coord_center</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Trimorph.apply_affine_transformation">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.Trimorph.apply_affine_transformation">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">apply_affine_transformation</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img</span><span class="p">,</span> <span class="n">transform_initializer</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">cv2</span><span class="o">.</span><span class="n">warpAffine</span><span class="p">(</span>
+            <span class="n">moving_img</span><span class="p">,</span>
+            <span class="n">transform_initializer</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">][:],</span>
+            <span class="n">fixed_img</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">][::</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Trimorph.prealignment">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.Trimorph.prealignment">[docs]</a>
+    <span class="k">def</span> <span class="nf">prealignment</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">fixed_img</span><span class="p">,</span>
+        <span class="n">moving_img</span><span class="p">,</span>
+        <span class="n">fixed_mask</span><span class="p">,</span>
+        <span class="n">moving_mask</span><span class="p">,</span>
+        <span class="n">dice_overlap</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">rotation_step</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">orig_fixed_img</span><span class="p">,</span> <span class="n">orig_moving_img</span> <span class="o">=</span> <span class="n">fixed_img</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">moving_img</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fixed_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="n">BIN_MASK_DIM</span><span class="p">:</span>
+            <span class="n">fixed_mask</span> <span class="o">=</span> <span class="n">fixed_mask</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">moving_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="n">BIN_MASK_DIM</span><span class="p">:</span>
+            <span class="n">moving_mask</span> <span class="o">=</span> <span class="n">moving_mask</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">fixed_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">fixed_mask</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">moving_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">moving_mask</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+        <span class="n">fixed_img</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">)</span>
+        <span class="n">moving_img</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">moving_img</span><span class="p">)</span>
+
+        <span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_check_dims</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img</span><span class="p">,</span> <span class="n">fixed_mask</span><span class="p">,</span> <span class="n">moving_mask</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">rotation_step</span> <span class="o">&lt;</span> <span class="mi">10</span> <span class="ow">or</span> <span class="n">rotation_step</span> <span class="o">&gt;</span> <span class="mi">20</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Please select the rotation step between 10 and 20.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">dice_overlap</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The dice_overlap should be in between 0 and 1.0.&quot;</span><span class="p">)</span>
+
+        <span class="n">fixed_img</span> <span class="o">=</span> <span class="n">exposure</span><span class="o">.</span><span class="n">rescale_intensity</span><span class="p">(</span><span class="n">img_as_float</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">),</span> <span class="n">in_range</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">moving_img</span> <span class="o">=</span> <span class="n">exposure</span><span class="o">.</span><span class="n">rescale_intensity</span><span class="p">(</span><span class="n">img_as_float</span><span class="p">(</span><span class="n">moving_img</span><span class="p">),</span> <span class="n">in_range</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+
+        <span class="n">height</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">((</span><span class="n">fixed_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">moving_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])))</span>
+        <span class="n">width</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">((</span><span class="n">fixed_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">moving_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])))</span>
+
+        <span class="n">padded_fixed_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span>
+            <span class="n">fixed_mask</span><span class="p">,</span>
+            <span class="n">pad_width</span><span class="o">=</span><span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="n">height</span> <span class="o">-</span> <span class="n">fixed_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">width</span> <span class="o">-</span> <span class="n">fixed_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])],</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;constant&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">padded_moving_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span>
+            <span class="n">moving_mask</span><span class="p">,</span>
+            <span class="n">pad_width</span><span class="o">=</span><span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="n">height</span> <span class="o">-</span> <span class="n">moving_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">width</span> <span class="o">-</span> <span class="n">moving_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])],</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;constant&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">dice_before</span> <span class="o">=</span> <span class="n">dice</span><span class="p">(</span><span class="n">padded_fixed_mask</span><span class="p">,</span> <span class="n">padded_moving_mask</span><span class="p">)</span>
+
+        <span class="n">fixed_com</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_center_of_mass</span><span class="p">((</span><span class="mi">1</span> <span class="o">-</span> <span class="n">fixed_img</span><span class="p">)</span> <span class="o">*</span> <span class="n">fixed_mask</span><span class="p">)</span>
+        <span class="n">moving_com</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_center_of_mass</span><span class="p">((</span><span class="mi">1</span> <span class="o">-</span> <span class="n">moving_img</span><span class="p">)</span> <span class="o">*</span> <span class="n">moving_mask</span><span class="p">)</span>
+
+        <span class="n">com_transform</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">fixed_com</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">moving_com</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span>
+             <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">fixed_com</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">moving_com</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span>
+             <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+        <span class="p">)</span>
+
+        <span class="n">origin_transform_com_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+            <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="n">fixed_com</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span>
+            <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="n">fixed_com</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span>
+            <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="p">])</span>
+        <span class="n">origin_transform_com</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+            <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">fixed_com</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span>
+            <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">fixed_com</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span>
+            <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="p">])</span>
+
+        <span class="n">all_dice</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_transform</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Downsample masks for the exhaustive rotation search to reduce warp cost (~16× faster)</span>
+        <span class="n">SEARCH_SCALE</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">small_fixed_mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">fixed_mask</span><span class="p">,</span>
+                                       <span class="p">(</span><span class="n">fixed_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="n">SEARCH_SCALE</span><span class="p">,</span>
+                                        <span class="n">fixed_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="n">SEARCH_SCALE</span><span class="p">),</span>
+                                       <span class="n">interpolation</span><span class="o">=</span><span class="n">cv2</span><span class="o">.</span><span class="n">INTER_NEAREST</span><span class="p">)</span>
+        <span class="n">small_moving_mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">moving_mask</span><span class="p">,</span>
+                                        <span class="p">(</span><span class="n">moving_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="n">SEARCH_SCALE</span><span class="p">,</span>
+                                         <span class="n">moving_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="n">SEARCH_SCALE</span><span class="p">),</span>
+                                        <span class="n">interpolation</span><span class="o">=</span><span class="n">cv2</span><span class="o">.</span><span class="n">INTER_NEAREST</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">angle</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">360</span><span class="p">,</span> <span class="n">rotation_step</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
+            <span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="n">angle</span><span class="p">)</span>
+            <span class="n">c</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span>
+            <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+                <span class="p">[</span><span class="n">c</span><span class="p">,</span> <span class="o">-</span><span class="n">s</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+                <span class="p">[</span><span class="n">s</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+                <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="p">])</span>
+
+            <span class="n">transform</span> <span class="o">=</span> <span class="n">origin_transform_com</span> <span class="o">@</span> <span class="n">rotation_matrix</span> <span class="o">@</span> <span class="n">origin_transform_com_</span> <span class="o">@</span> <span class="n">com_transform</span>
+
+            <span class="c1"># Scale translation part for the downsampled search masks</span>
+            <span class="n">search_transform</span> <span class="o">=</span> <span class="n">transform</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">search_transform</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">/=</span> <span class="n">SEARCH_SCALE</span>
+
+            <span class="n">warped_moving_mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">warpAffine</span><span class="p">(</span>
+                <span class="n">small_moving_mask</span><span class="p">,</span>
+                <span class="n">search_transform</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">][:],</span>
+                <span class="n">small_fixed_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">][::</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+            <span class="p">)</span>
+            <span class="n">dice_com</span> <span class="o">=</span> <span class="n">dice</span><span class="p">(</span><span class="n">small_fixed_mask</span><span class="p">,</span> <span class="n">warped_moving_mask</span><span class="p">)</span>
+
+            <span class="n">all_dice</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dice_com</span><span class="p">)</span>
+            <span class="n">all_transform</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">transform</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">max</span><span class="p">(</span><span class="n">all_dice</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">dice_overlap</span><span class="p">:</span>
+            <span class="n">dice_after</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">all_dice</span><span class="p">)</span>
+            <span class="n">pre_transform</span> <span class="o">=</span> <span class="n">all_transform</span><span class="p">[</span><span class="n">all_dice</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">dice_after</span><span class="p">)]</span>
+
+            <span class="n">moving_img</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_affine_transformation</span><span class="p">(</span><span class="n">orig_fixed_img</span><span class="p">,</span> <span class="n">orig_moving_img</span><span class="p">,</span> <span class="n">pre_transform</span><span class="p">)</span>
+            <span class="n">moving_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_affine_transformation</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_mask</span><span class="p">,</span> <span class="n">pre_transform</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">pre_transform</span><span class="p">,</span> <span class="n">moving_img</span><span class="p">,</span> <span class="n">moving_mask</span><span class="p">,</span> <span class="n">dice_after</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">&quot;Not able to find the best transformation for pre-alignment. &quot;</span>
+            <span class="s2">&quot;Try changing the values for &#39;dice_overlap&#39; and &#39;rotation_step&#39;.&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">orig_moving_img</span><span class="p">,</span> <span class="n">moving_mask</span><span class="p">,</span> <span class="n">dice_before</span></div>
+</div>
+
+
+
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">fixed_mask = (fixed_mask &gt; 0).astype(np.uint8)</span>
+<span class="sd">moving_mask = (moving_mask &gt; 0).astype(np.uint8)</span>
+
+<span class="sd"># Create instance of Trimorph</span>
+<span class="sd">aligner = Trimorph()</span>
+
+<span class="sd"># Perform prealignment</span>
+<span class="sd">transform_matrix, aligned_image, aligned_mask, final_dice = aligner.prealignment(</span>
+<span class="sd">    fixed_img,</span>
+<span class="sd">    moving_img,</span>
+<span class="sd">    fixed_mask,</span>
+<span class="sd">    moving_mask,</span>
+<span class="sd">    dice_overlap=0.5,</span>
+<span class="sd">    rotation_step=10</span>
+<span class="sd">)</span>
+
+<span class="sd"># Show result (for debug)</span>
+<span class="sd">cv2.imshow(&quot;Aligned Image&quot;, aligned_image)</span>
+<span class="sd">cv2.imshow(&quot;Aligned Mask&quot;, aligned_mask * 255)</span>
+<span class="sd">print(&quot;Final Dice Score:&quot;, final_dice)</span>
+<span class="sd">cv2.waitKey(0)</span>
+<span class="sd">cv2.destroyAllWindows()</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<div class="viewcode-block" id="XFeatReg">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.XFeatReg">[docs]</a>
+<span class="k">class</span> <span class="nc">XFeatReg</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">top_k_matches</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8000</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">matcher</span> <span class="o">=</span> <span class="n">XFeat</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">top_k</span> <span class="o">=</span> <span class="n">top_k_matches</span>
+
+<div class="viewcode-block" id="XFeatReg.warp_corners_and_draw_matches">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.XFeatReg.warp_corners_and_draw_matches">[docs]</a>
+    <span class="k">def</span> <span class="nf">warp_corners_and_draw_matches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ref_points</span><span class="p">,</span> <span class="n">dst_points</span><span class="p">,</span> <span class="n">img1</span><span class="p">,</span> <span class="n">img2</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Estimate homography, warp corners of img1 to img2, and visualize matches.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">H</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">findHomography</span><span class="p">(</span><span class="n">ref_points</span><span class="p">,</span> <span class="n">dst_points</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">USAC_MAGSAC</span><span class="p">,</span> <span class="mf">3.5</span><span class="p">,</span> <span class="n">maxIters</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.999</span><span class="p">)</span>
+
+        <span class="n">h</span><span class="p">,</span> <span class="n">w</span> <span class="o">=</span> <span class="n">img1</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">corners_img1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">H</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Homography computation failed. Using identity matrix.&quot;</span><span class="p">)</span>
+            <span class="n">H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">ref_points</span><span class="p">),</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+
+        <span class="n">warped_corners</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">perspectiveTransform</span><span class="p">(</span><span class="n">corners_img1</span><span class="p">,</span> <span class="n">H</span><span class="p">)</span>
+
+        <span class="n">img2_with_corners</span> <span class="o">=</span> <span class="n">img2</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">warped_corners</span><span class="p">)):</span>
+            <span class="n">start_point</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">warped_corners</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">))</span>
+            <span class="n">end_point</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">warped_corners</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">))</span>
+            <span class="n">cv2</span><span class="o">.</span><span class="n">line</span><span class="p">(</span><span class="n">img2_with_corners</span><span class="p">,</span> <span class="n">start_point</span><span class="p">,</span> <span class="n">end_point</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">4</span><span class="p">)</span>
+
+        <span class="n">keypoints1</span> <span class="o">=</span> <span class="p">[</span><span class="n">cv2</span><span class="o">.</span><span class="n">KeyPoint</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">5</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">ref_points</span><span class="p">]</span>
+        <span class="n">keypoints2</span> <span class="o">=</span> <span class="p">[</span><span class="n">cv2</span><span class="o">.</span><span class="n">KeyPoint</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">5</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">dst_points</span><span class="p">]</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="p">[</span><span class="n">cv2</span><span class="o">.</span><span class="n">DMatch</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">mask</span><span class="p">))</span> <span class="k">if</span> <span class="n">mask</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span>
+
+        <span class="n">img_matches</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">drawMatches</span><span class="p">(</span>
+            <span class="n">img1</span><span class="p">,</span> <span class="n">keypoints1</span><span class="p">,</span> <span class="n">img2_with_corners</span><span class="p">,</span> <span class="n">keypoints2</span><span class="p">,</span> <span class="n">matches</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">matchColor</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">flags</span><span class="o">=</span><span class="mi">2</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">img_matches</span></div>
+
+
+<div class="viewcode-block" id="XFeatReg.register">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.XFeatReg.register">[docs]</a>
+    <span class="k">def</span> <span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">im1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">im2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Register im2 to im1 using feature matching and affine transform.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">mkpts_0</span><span class="p">,</span> <span class="n">mkpts_1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">matcher</span><span class="o">.</span><span class="n">match_xfeat_star</span><span class="p">(</span><span class="n">im2</span><span class="p">,</span> <span class="n">im1</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">top_k</span><span class="p">)</span>
+
+        <span class="n">mkpts_0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">mkpts_0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">mkpts_1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">mkpts_1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+        <span class="n">debug_matches</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">warp_corners_and_draw_matches</span><span class="p">(</span><span class="n">mkpts_0</span><span class="p">,</span> <span class="n">mkpts_1</span><span class="p">,</span> <span class="n">im2</span><span class="p">,</span> <span class="n">im1</span><span class="p">)</span>
+
+        <span class="n">M1</span><span class="p">,</span> <span class="n">mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">estimateAffinePartial2D</span><span class="p">(</span><span class="n">mkpts_0</span><span class="p">,</span> <span class="n">mkpts_1</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="n">cv2</span><span class="o">.</span><span class="n">RANSAC</span><span class="p">)</span>
+        <span class="n">aligned_img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">warpAffine</span><span class="p">(</span><span class="n">im2</span><span class="p">,</span> <span class="n">M1</span><span class="p">,</span> <span class="p">(</span><span class="n">im1</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">im1</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+
+        <span class="k">return</span> <span class="n">M1</span><span class="p">,</span> <span class="n">aligned_img</span></div>
+</div>
+
+<span class="w">    </span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd"># Load images</span>
+<span class="sd">im1 = cv2.imread(&quot;/path/to/reference_image.png&quot;)</span>
+<span class="sd">im2 = cv2.imread(&quot;/path/to/moving_image.png&quot;)</span>
+
+<span class="sd"># Create aligner and register images</span>
+<span class="sd">aligner =  XFeatReg()</span>
+<span class="sd">M, aligned_image = aligner.register(im1, im2)</span>
+
+<span class="sd"># Display results</span>
+<span class="sd">cv2.imshow(&quot;Aligned Image&quot;, aligned_image)</span>
+<span class="sd">cv2.waitKey(0)</span>
+<span class="sd">cv2.destroyAllWindows()</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+
+
+<span class="k">def</span> <span class="nf">_compute_ngf_cached</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img</span><span class="p">,</span> <span class="n">fixed_grad_cache</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">0.01</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute NGF metric re-using cached fixed-image gradients to avoid redundant np.gradient calls.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span> <span class="nn">skimage</span> <span class="kn">import</span> <span class="n">color</span> <span class="k">as</span> <span class="n">_color</span>
+    <span class="k">if</span> <span class="s1">&#39;fixed_gray&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fixed_grad_cache</span><span class="p">:</span>
+        <span class="n">fixed_gray</span> <span class="o">=</span> <span class="n">_color</span><span class="o">.</span><span class="n">rgb2gray</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">)</span>
+        <span class="n">fx</span><span class="p">,</span> <span class="n">fy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">fixed_gray</span><span class="p">)</span>
+        <span class="n">fixed_mag</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">fx</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">fy</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">epsilon</span>
+        <span class="n">fixed_grad_cache</span><span class="p">[</span><span class="s1">&#39;fixed_gray&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fixed_gray</span>
+        <span class="n">fixed_grad_cache</span><span class="p">[</span><span class="s1">&#39;fx_norm&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fx</span> <span class="o">/</span> <span class="n">fixed_mag</span>
+        <span class="n">fixed_grad_cache</span><span class="p">[</span><span class="s1">&#39;fy_norm&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fy</span> <span class="o">/</span> <span class="n">fixed_mag</span>
+
+    <span class="n">fx_norm</span> <span class="o">=</span> <span class="n">fixed_grad_cache</span><span class="p">[</span><span class="s1">&#39;fx_norm&#39;</span><span class="p">]</span>
+    <span class="n">fy_norm</span> <span class="o">=</span> <span class="n">fixed_grad_cache</span><span class="p">[</span><span class="s1">&#39;fy_norm&#39;</span><span class="p">]</span>
+
+    <span class="n">moving_gray</span> <span class="o">=</span> <span class="n">_color</span><span class="o">.</span><span class="n">rgb2gray</span><span class="p">(</span><span class="n">moving_img</span><span class="p">)</span>
+    <span class="n">mx</span><span class="p">,</span> <span class="n">my</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">moving_gray</span><span class="p">)</span>
+    <span class="n">moving_mag</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">mx</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">my</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">epsilon</span>
+    <span class="n">mx_norm</span> <span class="o">=</span> <span class="n">mx</span> <span class="o">/</span> <span class="n">moving_mag</span>
+    <span class="n">my_norm</span> <span class="o">=</span> <span class="n">my</span> <span class="o">/</span> <span class="n">moving_mag</span>
+
+    <span class="n">dot_product</span> <span class="o">=</span> <span class="n">fx_norm</span> <span class="o">*</span> <span class="n">mx_norm</span> <span class="o">+</span> <span class="n">fy_norm</span> <span class="o">*</span> <span class="n">my_norm</span>
+    <span class="n">ngf</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dot_product</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;NGF metric: </span><span class="si">%f</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">ngf</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ngf</span>
+
+
+<div class="viewcode-block" id="rigid_registration">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.rigid_registration">[docs]</a>
+<span class="k">def</span> <span class="nf">rigid_registration</span><span class="p">(</span><span class="n">moving_img</span><span class="p">,</span> <span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_mask</span><span class="p">,</span> <span class="n">fixed_mask</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Aligns a moving image to a fixed image using Trimorph and optionally XFeatReg if needed.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fixed_img (np.ndarray): Fixed image.</span>
+<span class="sd">        moving_img (np.ndarray): Moving image.</span>
+<span class="sd">        fixed_mask (np.ndarray): Fixed mask.</span>
+<span class="sd">        moving_mask (np.ndarray): Moving mask.</span>
+<span class="sd">        verbose (bool): If True, print intermediate steps.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        moving_img_transformed (np.ndarray): Final aligned moving image.</span>
+<span class="sd">        final_transform (np.ndarray): Final transformation matrix (3x3).</span>
+<span class="sd">        ngf_metrics (dict): Dictionary with NGF metrics before and after optional second registration.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ngf_metrics</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="c1"># Cache fixed-image gradients to avoid recomputing them for every NGF call</span>
+    <span class="n">_grad_cache</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># Initial registration with Trimorph</span>
+    <span class="n">aligner</span> <span class="o">=</span> <span class="n">Trimorph</span><span class="p">()</span>
+    <span class="n">best_transform1</span><span class="p">,</span> <span class="n">moving_img_transformed</span><span class="p">,</span> <span class="n">moving_mask_transformed</span><span class="p">,</span> <span class="n">max_dice</span> <span class="o">=</span> <span class="n">aligner</span><span class="o">.</span><span class="n">prealignment</span><span class="p">(</span>
+        <span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img</span><span class="p">,</span> <span class="n">fixed_mask</span><span class="p">,</span> <span class="n">moving_mask</span>
+    <span class="p">)</span>
+    <span class="c1"># Evaluate NGF metric</span>
+    <span class="n">ngf_initial</span> <span class="o">=</span> <span class="n">_compute_ngf_cached</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img_transformed</span><span class="p">,</span> <span class="n">_grad_cache</span><span class="p">)</span>
+    <span class="n">ngf_metrics</span><span class="p">[</span><span class="s1">&#39;NGF trimoph&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ngf_initial</span>
+    <span class="c1"># If no transformation was found (identity), do extra registration</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">best_transform1</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Running extra registration with XFeatReg...&quot;</span><span class="p">)</span>
+        <span class="n">aligner</span> <span class="o">=</span> <span class="n">XFeatReg</span><span class="p">()</span>
+        <span class="n">best_transform1</span><span class="p">,</span> <span class="n">moving_img_transformed</span> <span class="o">=</span> <span class="n">aligner</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img</span><span class="p">)</span>
+        <span class="n">best_transform1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">best_transform1</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]))</span>
+        <span class="n">ngf_metrics</span><span class="p">[</span><span class="s1">&#39;NGF XFeat&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_compute_ngf_cached</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img_transformed</span><span class="p">,</span> <span class="n">_grad_cache</span><span class="p">)</span>
+        <span class="n">final_transform</span> <span class="o">=</span> <span class="n">best_transform1</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Run XFeatReg once on the already-transformed image (avoids a second full registration)</span>
+        <span class="n">aligner</span> <span class="o">=</span> <span class="n">XFeatReg</span><span class="p">()</span>
+        <span class="n">M1</span><span class="p">,</span> <span class="n">aligned_image</span> <span class="o">=</span> <span class="n">aligner</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">moving_img_transformed</span><span class="p">)</span>
+        <span class="n">ngf_second</span> <span class="o">=</span> <span class="n">_compute_ngf_cached</span><span class="p">(</span><span class="n">fixed_img</span><span class="p">,</span> <span class="n">aligned_image</span><span class="p">,</span> <span class="n">_grad_cache</span><span class="p">)</span>
+        <span class="n">ngf_metrics</span><span class="p">[</span><span class="s1">&#39;NGF XFeat transformed&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ngf_second</span>
+
+        <span class="n">M1_hom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">M1</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]])</span> <span class="k">if</span> <span class="n">M1</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="k">else</span> <span class="n">M1</span>
+
+        <span class="c1"># Choose the better result: Trimorph alone vs. Trimorph + XFeat</span>
+        <span class="k">if</span> <span class="n">ngf_initial</span> <span class="o">&gt;=</span> <span class="n">ngf_second</span><span class="p">:</span>
+            <span class="n">final_transform</span> <span class="o">=</span> <span class="n">best_transform1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">final_transform</span> <span class="o">=</span> <span class="n">best_transform1</span> <span class="o">@</span> <span class="n">M1_hom</span>
+            <span class="n">moving_img_transformed</span> <span class="o">=</span> <span class="n">aligned_image</span>
+
+        <span class="k">return</span> <span class="n">moving_img_transformed</span><span class="p">,</span> <span class="n">final_transform</span><span class="p">,</span> <span class="n">ngf_metrics</span></div>
+
+
+<div class="viewcode-block" id="register_wsi_with_fine_tuning">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.register_wsi_with_fine_tuning">[docs]</a>
+<span class="k">def</span> <span class="nf">register_wsi_with_fine_tuning</span><span class="p">(</span><span class="n">source_wsi</span><span class="p">,</span> <span class="n">target_wsi</span><span class="p">,</span> <span class="n">source_mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">target_mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">initial_transform</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">patch_index</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">patch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">5000</span><span class="p">,</span> <span class="mi">5000</span><span class="p">),</span> <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">5000</span><span class="p">,</span> <span class="mi">5000</span><span class="p">),</span> <span class="n">base_resolution</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">scale_factor</span><span class="o">=</span><span class="mf">0.625</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Registers a source WSI to a target WSI using an initial transform and fine-tunes the registration </span>
+<span class="sd">    using phase cross-correlation on a specific patch.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">    -----------</span>
+<span class="sd">    source_wsi : object or str</span>
+<span class="sd">        Source WSI object or path to source WSI file</span>
+<span class="sd">    target_wsi : object or str</span>
+<span class="sd">        Target WSI object or path to target WSI file</span>
+<span class="sd">    source_mask : ndarray, optional</span>
+<span class="sd">        Mask for the source WSI</span>
+<span class="sd">    target_mask : ndarray, optional</span>
+<span class="sd">        Mask for the target WSI</span>
+<span class="sd">    initial_transform : ndarray, optional</span>
+<span class="sd">        Initial homogeneous transformation matrix to apply</span>
+<span class="sd">    patch_index : int, default=10</span>
+<span class="sd">        Index of the patch to use for fine-tuning</span>
+<span class="sd">    patch_size : tuple, default=(5000, 5000)</span>
+<span class="sd">        Size of patches to extract</span>
+<span class="sd">    stride : tuple, default=(5000, 5000)</span>
+<span class="sd">        Stride for sliding window patch extraction</span>
+<span class="sd">    base_resolution : int, default=0</span>
+<span class="sd">        Base resolution for patch extraction</span>
+<span class="sd">    target_resolution : int, default=10</span>
+<span class="sd">        Target resolution for transformation</span>
+<span class="sd">    scale_factor : float, default=0.625</span>
+<span class="sd">        Scale factor to apply to the transformation matrix</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">    --------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Dictionary containing:</span>
+<span class="sd">        - &#39;final_transform&#39;: The final transformation matrix</span>
+<span class="sd">        - &#39;registered_image&#39;: The registered image patch</span>
+<span class="sd">        - &#39;fixed_tile&#39;: The fixed (target) image patch</span>
+<span class="sd">        - &#39;transformed_tile&#39;: The transformed (source) image patch before fine-tuning</span>
+<span class="sd">        - &#39;shift&#39;: The calculated shift between patches</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+   
+    
+    <span class="c1"># Set up patch extractors for both target and source WSIs</span>
+    <span class="n">fixed_patch_extractor</span> <span class="o">=</span> <span class="n">patchextraction</span><span class="o">.</span><span class="n">get_patch_extractor</span><span class="p">(</span>
+        <span class="n">input_img</span><span class="o">=</span><span class="n">target_wsi</span><span class="p">,</span>
+        <span class="n">method_name</span><span class="o">=</span><span class="s2">&quot;slidingwindow&quot;</span><span class="p">,</span>
+        <span class="n">patch_size</span><span class="o">=</span><span class="n">patch_size</span><span class="p">,</span>
+        <span class="n">input_mask</span><span class="o">=</span><span class="n">target_mask</span><span class="p">,</span>
+        <span class="n">stride</span><span class="o">=</span><span class="n">stride</span><span class="p">,</span>
+        <span class="n">resolution</span><span class="o">=</span><span class="n">base_resolution</span>
+    <span class="p">)</span>
+    
+    <span class="n">moving_patch_extractor</span> <span class="o">=</span> <span class="n">patchextraction</span><span class="o">.</span><span class="n">get_patch_extractor</span><span class="p">(</span>
+        <span class="n">input_img</span><span class="o">=</span><span class="n">source_wsi</span><span class="p">,</span>
+        <span class="n">method_name</span><span class="o">=</span><span class="s2">&quot;slidingwindow&quot;</span><span class="p">,</span>
+        <span class="n">patch_size</span><span class="o">=</span><span class="n">patch_size</span><span class="p">,</span>
+        <span class="n">input_mask</span><span class="o">=</span><span class="n">source_mask</span><span class="p">,</span>
+        <span class="n">stride</span><span class="o">=</span><span class="n">stride</span><span class="p">,</span>
+        <span class="n">resolution</span><span class="o">=</span><span class="n">base_resolution</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Use the provided initial transform or identity matrix</span>
+    <span class="n">M_homogeneous</span> <span class="o">=</span> <span class="n">initial_transform</span> <span class="k">if</span> <span class="n">initial_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    
+    <span class="c1"># Scale the transformation matrix for the target resolution</span>
+    <span class="n">transform_40x</span> <span class="o">=</span> <span class="n">util</span><span class="o">.</span><span class="n">scale_transformation_matrix</span><span class="p">(</span><span class="n">M_homogeneous</span><span class="p">,</span> <span class="n">scale_factor</span><span class="p">,</span> <span class="n">target_resolution</span><span class="p">)</span>
+    
+    <span class="c1"># Get the fixed tile from the target WSI</span>
+    <span class="n">fixed_tile</span> <span class="o">=</span> <span class="n">fixed_patch_extractor</span><span class="p">[</span><span class="n">patch_index</span><span class="p">]</span>
+    
+    <span class="c1"># Create transformer for the source WSI</span>
+    <span class="n">tfm</span> <span class="o">=</span> <span class="n">AffineWSITransformer</span><span class="p">(</span><span class="n">source_wsi</span><span class="p">,</span> <span class="n">transform_40x</span><span class="p">)</span>
+    
+    <span class="c1"># Get coordinates of the selected patch</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">fixed_patch_extractor</span><span class="o">.</span><span class="n">coordinate_list</span><span class="p">[</span><span class="n">patch_index</span><span class="p">]</span>
+    <span class="n">location</span> <span class="o">=</span> <span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coords</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">-</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    
+    <span class="c1"># Read the corresponding patch from the transformed source WSI</span>
+    <span class="n">transformed_tile</span> <span class="o">=</span> <span class="n">tfm</span><span class="o">.</span><span class="n">read_rect</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">resolution</span><span class="o">=</span><span class="n">target_resolution</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">&quot;power&quot;</span><span class="p">)</span>
+    
+    <span class="c1"># Optional gamma correction can be uncommented if needed</span>
+    <span class="c1"># transformed_tile = util.gamma_corrections(transformed_tile, 0.8)</span>
+    
+    <span class="c1"># Calculate shift between the fixed and transformed tiles using phase cross-correlation</span>
+    <span class="n">shift</span><span class="p">,</span> <span class="n">error</span><span class="p">,</span> <span class="n">diffphase</span> <span class="o">=</span> <span class="n">phase_cross_correlation</span><span class="p">(</span><span class="n">fixed_tile</span><span class="p">,</span> <span class="n">transformed_tile</span><span class="p">)</span>
+    
+    <span class="c1"># Create translation matrix based on the calculated shift</span>
+    <span class="n">translation_offset</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+        <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="n">shift</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span> 
+        <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="n">shift</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> 
+        <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="p">])</span>
+    
+    <span class="c1"># Apply the translation to get the registered image</span>
+    <span class="n">registered_image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">warpAffine</span><span class="p">(</span>
+        <span class="n">transformed_tile</span><span class="p">,</span> 
+        <span class="n">translation_offset</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> 
+        <span class="p">(</span><span class="n">transformed_tile</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">transformed_tile</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Update the transformation matrix with the fine-tuned translation</span>
+    <span class="n">transform_40x</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">+=</span> <span class="n">translation_offset</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>  <span class="c1"># Add x translation</span>
+    <span class="n">transform_40x</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">+=</span> <span class="n">translation_offset</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>  <span class="c1"># Add y translation</span>
+    
+    <span class="c1"># Recalculate the transformer with the updated transformation matrix</span>
+    <span class="n">updated_tfm</span> <span class="o">=</span> <span class="n">AffineWSITransformer</span><span class="p">(</span><span class="n">source_wsi</span><span class="p">,</span> <span class="n">transform_40x</span><span class="p">)</span>
+    
+    <span class="c1"># Extract the tiles again using the updated transformer</span>
+    <span class="n">fixed_tile_updated</span> <span class="o">=</span> <span class="n">fixed_patch_extractor</span><span class="p">[</span><span class="n">patch_index</span><span class="p">]</span>
+    
+    <span class="c1"># Get the updated transformed tile using the updated transformer</span>
+    <span class="n">updated_transformed_tile</span> <span class="o">=</span> <span class="n">updated_tfm</span><span class="o">.</span><span class="n">read_rect</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">resolution</span><span class="o">=</span><span class="n">target_resolution</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">&quot;power&quot;</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;final_transform&#39;</span><span class="p">:</span> <span class="n">transform_40x</span><span class="p">,</span>
+        <span class="s1">&#39;registered_image&#39;</span><span class="p">:</span> <span class="n">registered_image</span><span class="p">,</span>
+        <span class="s1">&#39;original_fixed_tile&#39;</span><span class="p">:</span> <span class="n">fixed_tile</span><span class="p">,</span>
+        <span class="s1">&#39;original_transformed_tile&#39;</span><span class="p">:</span> <span class="n">transformed_tile</span><span class="p">,</span>
+        <span class="s1">&#39;updated_fixed_tile&#39;</span><span class="p">:</span> <span class="n">fixed_tile_updated</span><span class="p">,</span>
+        <span class="s1">&#39;updated_transformed_tile&#39;</span><span class="p">:</span> <span class="n">updated_transformed_tile</span><span class="p">,</span>
+        <span class="s1">&#39;shift&#39;</span><span class="p">:</span> <span class="n">shift</span><span class="p">,</span>
+        <span class="s1">&#39;updated_transformer&#39;</span><span class="p">:</span> <span class="n">updated_tfm</span>
+    <span class="p">}</span></div>
+
+<div class="viewcode-block" id="extract_corresponding_tiles">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.extract_corresponding_tiles">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_corresponding_tiles</span><span class="p">(</span><span class="n">source_wsi</span><span class="p">,</span> <span class="n">target_wsi</span><span class="p">,</span> <span class="n">source_mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">target_mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+                               <span class="n">transform_matrix</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">patch_index</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">patch_size</span><span class="o">=</span><span class="p">(</span><span class="mi">5000</span><span class="p">,</span> <span class="mi">5000</span><span class="p">),</span> 
+                               <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">5000</span><span class="p">,</span> <span class="mi">5000</span><span class="p">),</span> <span class="n">base_resolution</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">target_resolution</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> 
+                               <span class="n">scale_factor</span><span class="o">=</span><span class="mf">0.625</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extracts corresponding tiles from source and target WSIs using a transformation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">    -----------</span>
+<span class="sd">    source_wsi : object or str</span>
+<span class="sd">        Source WSI object or path to source WSI file</span>
+<span class="sd">    target_wsi : object or str</span>
+<span class="sd">        Target WSI object or path to target WSI file</span>
+<span class="sd">    source_mask : ndarray, optional</span>
+<span class="sd">        Mask for the source WSI</span>
+<span class="sd">    target_mask : ndarray, optional</span>
+<span class="sd">        Mask for the target WSI</span>
+<span class="sd">    transform_matrix : ndarray, optional</span>
+<span class="sd">        Homogeneous transformation matrix to apply</span>
+<span class="sd">    patch_index : int, default=10</span>
+<span class="sd">        Index of the patch to extract</span>
+<span class="sd">    patch_size : tuple, default=(5000, 5000)</span>
+<span class="sd">        Size of patches to extract</span>
+<span class="sd">    stride : tuple, default=(5000, 5000)</span>
+<span class="sd">        Stride for sliding window patch extraction</span>
+<span class="sd">    base_resolution : int, default=0</span>
+<span class="sd">        Base resolution for patch extraction</span>
+<span class="sd">    target_resolution : int, default=10</span>
+<span class="sd">        Target resolution for transformation</span>
+<span class="sd">    scale_factor : float, default=0.625</span>
+<span class="sd">        Scale factor to apply to the transformation matrix</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">    --------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Dictionary containing:</span>
+<span class="sd">        - &#39;fixed_tile&#39;: The fixed (target) image patch</span>
+<span class="sd">        - &#39;transformed_tile&#39;: The transformed (source) image patch</span>
+<span class="sd">        - &#39;transform_40x&#39;: The scaled transformation matrix</span>
+<span class="sd">        - &#39;location&#39;: The location of the extracted patch</span>
+<span class="sd">        - &#39;size&#39;: The size of the extracted patch</span>
+<span class="sd">        - &#39;patch_extractor_fixed&#39;: The patch extractor for the target WSI</span>
+<span class="sd">        - &#39;patch_extractor_moving&#39;: The patch extractor for the source WSI</span>
+<span class="sd">        - &#39;transformer&#39;: The AffineWSITransformer used</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+  
+    
+    <span class="c1"># Set up patch extractors for both target and source WSIs</span>
+    <span class="n">fixed_patch_extractor</span> <span class="o">=</span> <span class="n">patchextraction</span><span class="o">.</span><span class="n">get_patch_extractor</span><span class="p">(</span>
+        <span class="n">input_img</span><span class="o">=</span><span class="n">target_wsi</span><span class="p">,</span>
+        <span class="n">method_name</span><span class="o">=</span><span class="s2">&quot;slidingwindow&quot;</span><span class="p">,</span>
+        <span class="n">patch_size</span><span class="o">=</span><span class="n">patch_size</span><span class="p">,</span>
+        <span class="n">input_mask</span><span class="o">=</span><span class="n">target_mask</span><span class="p">,</span>
+        <span class="n">stride</span><span class="o">=</span><span class="n">stride</span><span class="p">,</span>
+        <span class="n">resolution</span><span class="o">=</span><span class="n">base_resolution</span>
+    <span class="p">)</span>
+    
+    <span class="n">moving_patch_extractor</span> <span class="o">=</span> <span class="n">patchextraction</span><span class="o">.</span><span class="n">get_patch_extractor</span><span class="p">(</span>
+        <span class="n">input_img</span><span class="o">=</span><span class="n">source_wsi</span><span class="p">,</span>
+        <span class="n">method_name</span><span class="o">=</span><span class="s2">&quot;slidingwindow&quot;</span><span class="p">,</span>
+        <span class="n">patch_size</span><span class="o">=</span><span class="n">patch_size</span><span class="p">,</span>
+        <span class="n">input_mask</span><span class="o">=</span><span class="n">source_mask</span><span class="p">,</span>
+        <span class="n">stride</span><span class="o">=</span><span class="n">stride</span><span class="p">,</span>
+        <span class="n">resolution</span><span class="o">=</span><span class="n">base_resolution</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Use the provided transform matrix or identity matrix</span>
+    <span class="n">M_homogeneous</span> <span class="o">=</span> <span class="n">transform_matrix</span> <span class="k">if</span> <span class="n">transform_matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    
+    <span class="c1"># Scale the transformation matrix for the target resolution</span>
+    <span class="n">transform_40x</span> <span class="o">=</span> <span class="n">util</span><span class="o">.</span><span class="n">scale_transformation_matrix</span><span class="p">(</span><span class="n">M_homogeneous</span><span class="p">,</span> <span class="n">scale_factor</span><span class="p">,</span> <span class="n">target_resolution</span><span class="p">)</span>
+    
+    <span class="c1"># Get the fixed tile from the target WSI</span>
+    <span class="n">fixed_tile</span> <span class="o">=</span> <span class="n">fixed_patch_extractor</span><span class="p">[</span><span class="n">patch_index</span><span class="p">]</span>
+    
+    <span class="c1"># Create transformer for the source WSI</span>
+    <span class="n">tfm</span> <span class="o">=</span> <span class="n">AffineWSITransformer</span><span class="p">(</span><span class="n">source_wsi</span><span class="p">,</span> <span class="n">transform_40x</span><span class="p">)</span>
+    
+    <span class="c1"># Get coordinates of the selected patch</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">fixed_patch_extractor</span><span class="o">.</span><span class="n">coordinate_list</span><span class="p">[</span><span class="n">patch_index</span><span class="p">]</span>
+    <span class="n">location</span> <span class="o">=</span> <span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">coords</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">coords</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coords</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">-</span> <span class="n">coords</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    
+    <span class="c1"># Read the corresponding patch from the transformed source WSI</span>
+    <span class="n">transformed_tile</span> <span class="o">=</span> <span class="n">tfm</span><span class="o">.</span><span class="n">read_rect</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span> <span class="n">resolution</span><span class="o">=</span><span class="n">target_resolution</span><span class="p">,</span> <span class="n">units</span><span class="o">=</span><span class="s2">&quot;power&quot;</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;fixed_tile&#39;</span><span class="p">:</span> <span class="n">fixed_tile</span><span class="p">,</span>
+        <span class="s1">&#39;transformed_tile&#39;</span><span class="p">:</span> <span class="n">transformed_tile</span><span class="p">,</span>
+        <span class="s1">&#39;transform_40x&#39;</span><span class="p">:</span> <span class="n">transform_40x</span><span class="p">,</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="ShapeAwarePointSetRegistration">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.ShapeAwarePointSetRegistration">[docs]</a>
+<span class="k">class</span> <span class="nc">ShapeAwarePointSetRegistration</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fixed_points</span><span class="p">,</span> <span class="n">moving_points</span><span class="p">,</span>
+                 <span class="n">shape_attribute</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">shape_weight</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                 <span class="n">max_iterations</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span>
+                 <span class="n">allow_scaling</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+
+        <span class="c1"># --- Convert inputs to numpy arrays ---</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fixed_points</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fixed</span> <span class="o">=</span> <span class="n">fixed_points</span><span class="p">[[</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fixed_shape</span> <span class="o">=</span> <span class="p">(</span><span class="n">fixed_points</span><span class="p">[</span><span class="n">shape_attribute</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> 
+                               <span class="k">if</span> <span class="n">shape_attribute</span> <span class="ow">and</span> <span class="n">shape_attribute</span> <span class="ow">in</span> <span class="n">fixed_points</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fixed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fixed_points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fixed_shape</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">moving_points</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">moving</span> <span class="o">=</span> <span class="n">moving_points</span><span class="p">[[</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">moving_shape</span> <span class="o">=</span> <span class="p">(</span><span class="n">moving_points</span><span class="p">[</span><span class="n">shape_attribute</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+                                <span class="k">if</span> <span class="n">shape_attribute</span> <span class="ow">and</span> <span class="n">shape_attribute</span> <span class="ow">in</span> <span class="n">moving_points</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">moving</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">moving_points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">moving_shape</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">moving</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Both fixed_points and moving_points must have exactly 2 columns (x, y).&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">shape_weight</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">shape_weight</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_iterations</span> <span class="o">=</span> <span class="n">max_iterations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tolerance</span> <span class="o">=</span> <span class="n">tolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">allow_scaling</span> <span class="o">=</span> <span class="n">allow_scaling</span>
+
+        <span class="c1"># Normalize shape attributes for better weighting</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">moving_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">shape_std</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_shape</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">shape_std</span> <span class="o">&gt;</span> <span class="mf">1e-9</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">shape_scale</span> <span class="o">=</span> <span class="n">shape_std</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">shape_scale</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">shape_scale</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">rotation</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">translation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_apply_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">s</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply similarity transform with vectorized operations.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">s</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">R</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">+</span> <span class="n">t</span>
+
+    <span class="k">def</span> <span class="nf">_estimate_rigid_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Estimate weighted similarity transform (rotation, translation, scale).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">A</span><span class="p">))</span>
+        
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>  <span class="c1"># normalize weights</span>
+        
+        <span class="c1"># Weighted centroids</span>
+        <span class="n">centroid_A</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">A</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">centroid_B</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">B</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        
+        <span class="n">AA</span> <span class="o">=</span> <span class="n">A</span> <span class="o">-</span> <span class="n">centroid_A</span>
+        <span class="n">BB</span> <span class="o">=</span> <span class="n">B</span> <span class="o">-</span> <span class="n">centroid_B</span>
+        
+        <span class="c1"># Weighted covariance</span>
+        <span class="n">H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">AA</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">BB</span> <span class="o">*</span> <span class="n">weights</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">])</span>
+        
+        <span class="n">U</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">Vt</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">svd</span><span class="p">(</span><span class="n">H</span><span class="p">)</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Vt</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+        
+        <span class="c1"># Ensure proper rotation (det = 1)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">R</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">Vt</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:]</span> <span class="o">*=</span> <span class="o">-</span><span class="mi">1</span>
+            <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">Vt</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">U</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">allow_scaling</span><span class="p">:</span>
+            <span class="n">num</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span> <span class="o">*</span> <span class="n">BB</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">AA</span><span class="p">,</span> <span class="n">R</span><span class="p">))</span>
+            <span class="n">den</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">]</span> <span class="o">*</span> <span class="n">AA</span> <span class="o">*</span> <span class="n">AA</span><span class="p">)</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="n">num</span> <span class="o">/</span> <span class="p">(</span><span class="n">den</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">)</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">))</span>  <span class="c1"># clamp scale to reasonable range</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+        <span class="n">t</span> <span class="o">=</span> <span class="n">centroid_B</span> <span class="o">-</span> <span class="n">s</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">centroid_A</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">s</span>
+
+<div class="viewcode-block" id="ShapeAwarePointSetRegistration.register">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.ShapeAwarePointSetRegistration.register">[docs]</a>
+    <span class="k">def</span> <span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform iterative closest point registration with shape awareness.&quot;&quot;&quot;</span>
+        <span class="n">fixed_xy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed</span>
+        <span class="n">moving_xy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">moving</span>
+        <span class="n">n_moving</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">moving_xy</span><span class="p">)</span>
+
+        <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="n">prev_error</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+
+        <span class="c1"># Pre-compute spatial distance scale for normalization</span>
+        <span class="n">spatial_std</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">fixed_xy</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">spatial_std</span> <span class="o">&lt;</span> <span class="mf">1e-9</span><span class="p">:</span>
+            <span class="n">spatial_std</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+        <span class="k">for</span> <span class="n">it</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_iterations</span><span class="p">):</span>
+            <span class="n">transformed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">moving_xy</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span>
+
+            <span class="c1"># --- Step 1: Find spatial nearest neighbors ---</span>
+            <span class="n">kdtree</span> <span class="o">=</span> <span class="n">KDTree</span><span class="p">(</span><span class="n">fixed_xy</span><span class="p">)</span>
+            <span class="n">spatial_dists</span><span class="p">,</span> <span class="n">spatial_idx</span> <span class="o">=</span> <span class="n">kdtree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">transformed</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="c1"># --- Step 2: Refine correspondences with shape information ---</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape_weight</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">fixed_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">moving_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># Normalize spatial distances</span>
+                <span class="n">norm_spatial_dists</span> <span class="o">=</span> <span class="n">spatial_dists</span> <span class="o">/</span> <span class="n">spatial_std</span>
+                
+                <span class="c1"># Compute shape distances</span>
+                <span class="n">shape_dists</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_shape</span><span class="p">[</span><span class="n">spatial_idx</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">moving_shape</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape_scale</span>
+                
+                <span class="c1"># Combined distance metric</span>
+                <span class="n">combined_dists</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape_weight</span><span class="p">)</span> <span class="o">*</span> <span class="n">norm_spatial_dists</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape_weight</span> <span class="o">*</span> <span class="n">shape_dists</span>
+                
+                <span class="c1"># For better matching, consider k-nearest neighbors and pick best combined match</span>
+                <span class="n">k_neighbors</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">fixed_xy</span><span class="p">))</span>
+                <span class="n">nn_dists</span><span class="p">,</span> <span class="n">nn_idx</span> <span class="o">=</span> <span class="n">kdtree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">transformed</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">)</span>
+                
+                <span class="n">best_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_moving</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_moving</span><span class="p">):</span>
+                    <span class="n">candidates</span> <span class="o">=</span> <span class="n">nn_idx</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                    <span class="n">spatial_d</span> <span class="o">=</span> <span class="n">nn_dists</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">/</span> <span class="n">spatial_std</span>
+                    <span class="n">shape_d</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fixed_shape</span><span class="p">[</span><span class="n">candidates</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">moving_shape</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape_scale</span>
+                    <span class="n">combined</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape_weight</span><span class="p">)</span> <span class="o">*</span> <span class="n">spatial_d</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape_weight</span> <span class="o">*</span> <span class="n">shape_d</span>
+                    <span class="n">best_idx</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">candidates</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">combined</span><span class="p">)]</span>
+                
+                <span class="n">idx</span> <span class="o">=</span> <span class="n">best_idx</span>
+                <span class="n">matched_fixed</span> <span class="o">=</span> <span class="n">fixed_xy</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                
+                <span class="c1"># Weight matches by inverse distance for robustness</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">combined_dists</span> <span class="o">+</span> <span class="mf">1e-6</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">idx</span> <span class="o">=</span> <span class="n">spatial_idx</span>
+                <span class="n">matched_fixed</span> <span class="o">=</span> <span class="n">fixed_xy</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">spatial_dists</span> <span class="o">+</span> <span class="mf">1e-6</span><span class="p">)</span>
+
+            <span class="c1"># --- Step 3: Estimate transform with weighted least squares ---</span>
+            <span class="n">R_new</span><span class="p">,</span> <span class="n">t_new</span><span class="p">,</span> <span class="n">s_new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_estimate_rigid_transform</span><span class="p">(</span><span class="n">moving_xy</span><span class="p">,</span> <span class="n">matched_fixed</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+
+            <span class="c1"># --- Step 4: Update transform ---</span>
+            <span class="n">R</span> <span class="o">=</span> <span class="n">R_new</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">t_new</span>
+            <span class="n">s</span> <span class="o">=</span> <span class="n">s_new</span>
+
+            <span class="c1"># --- Step 5: Compute alignment error ---</span>
+            <span class="n">transformed_new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">moving_xy</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span>
+            <span class="n">errors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">matched_fixed</span> <span class="o">-</span> <span class="n">transformed_new</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">error</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">errors</span><span class="p">)</span>
+            
+            <span class="c1"># Check convergence</span>
+            <span class="k">if</span> <span class="n">it</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">prev_error</span> <span class="o">-</span> <span class="n">error</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">tolerance</span> <span class="o">*</span> <span class="nb">max</span><span class="p">(</span><span class="n">prev_error</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">):</span>
+                <span class="k">break</span>
+            <span class="n">prev_error</span> <span class="o">=</span> <span class="n">error</span>
+
+        <span class="c1"># Final transformation</span>
+        <span class="n">transformed_final</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_transform</span><span class="p">(</span><span class="n">moving_xy</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">R</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">R</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">translation</span> <span class="o">=</span> <span class="n">t</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">s</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">final_error</span> <span class="o">=</span> <span class="n">prev_error</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_iterations</span> <span class="o">=</span> <span class="n">it</span> <span class="o">+</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">registered_points</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+            <span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="n">moving_xy</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+            <span class="s1">&#39;y&#39;</span><span class="p">:</span> <span class="n">moving_xy</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+            <span class="s1">&#39;registered_x&#39;</span><span class="p">:</span> <span class="n">transformed_final</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+            <span class="s1">&#39;registered_y&#39;</span><span class="p">:</span> <span class="n">transformed_final</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="p">})</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">registered_points</span></div>
+
+
+<div class="viewcode-block" id="ShapeAwarePointSetRegistration.get_transformation_matrix">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.ShapeAwarePointSetRegistration.get_transformation_matrix">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_transformation_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return 3x3 homogeneous transformation matrix.&quot;&quot;&quot;</span>
+        <span class="n">theta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rotation</span>
+        <span class="n">cos_t</span><span class="p">,</span> <span class="n">sin_t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span>
+        <span class="n">tx</span><span class="p">,</span> <span class="n">ty</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">translation</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+            <span class="p">[</span><span class="n">s</span> <span class="o">*</span> <span class="n">cos_t</span><span class="p">,</span> <span class="o">-</span><span class="n">s</span> <span class="o">*</span> <span class="n">sin_t</span><span class="p">,</span> <span class="n">tx</span><span class="p">],</span>
+            <span class="p">[</span><span class="n">s</span> <span class="o">*</span> <span class="n">sin_t</span><span class="p">,</span>  <span class="n">s</span> <span class="o">*</span> <span class="n">cos_t</span><span class="p">,</span> <span class="n">ty</span><span class="p">],</span>
+            <span class="p">[</span><span class="mi">0</span><span class="p">,</span>          <span class="mi">0</span><span class="p">,</span>         <span class="mi">1</span><span class="p">]</span>
+        <span class="p">])</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="perform_shape_aware_registration">
+<a class="viewcode-back" href="../../../api/registration.html#core.registration.rigid.perform_shape_aware_registration">[docs]</a>
+<span class="k">def</span> <span class="nf">perform_shape_aware_registration</span><span class="p">(</span><span class="n">fixed_df</span><span class="p">,</span> <span class="n">moving_df</span><span class="p">,</span>
+                                     <span class="n">shape_attribute</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                     <span class="n">shape_weight</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                                     <span class="n">max_iterations</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+                                     <span class="n">tolerance</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span>
+                                     <span class="n">allow_scaling</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convenience function for shape-aware point set registration.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        registrator: The registration object with transformation parameters</span>
+<span class="sd">        transform_matrix: 3x3 homogeneous transformation matrix</span>
+<span class="sd">        coords: Nx2 array of registered coordinates</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">registrator</span> <span class="o">=</span> <span class="n">ShapeAwarePointSetRegistration</span><span class="p">(</span>
+        <span class="n">fixed_df</span><span class="p">,</span> <span class="n">moving_df</span><span class="p">,</span>
+        <span class="n">shape_attribute</span><span class="o">=</span><span class="n">shape_attribute</span><span class="p">,</span>
+        <span class="n">shape_weight</span><span class="o">=</span><span class="n">shape_weight</span><span class="p">,</span>
+        <span class="n">max_iterations</span><span class="o">=</span><span class="n">max_iterations</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="o">=</span><span class="n">tolerance</span><span class="p">,</span>
+        <span class="n">allow_scaling</span><span class="o">=</span><span class="n">allow_scaling</span>
+    <span class="p">)</span>
+    <span class="n">registered_points</span> <span class="o">=</span> <span class="n">registrator</span><span class="o">.</span><span class="n">register</span><span class="p">()</span>
+    <span class="n">transform_matrix</span> <span class="o">=</span> <span class="n">registrator</span><span class="o">.</span><span class="n">get_transformation_matrix</span><span class="p">()</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">registered_points</span><span class="p">[[</span><span class="s1">&#39;registered_x&#39;</span><span class="p">,</span> <span class="s1">&#39;registered_y&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">values</span>
+    <span class="k">return</span> <span class="n">registrator</span><span class="p">,</span> <span class="n">transform_matrix</span><span class="p">,</span> <span class="n">coords</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Esha Sadia Nasir et al..</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
