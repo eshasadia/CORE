@@ -41,13 +41,20 @@ def build_reference_coordinate_system(input_tensor: Optional[torch.Tensor] = Non
     return coordinate_grid
 
 
+# Module-level cache for GaussianBlur instances keyed by (kernel_width, sigma)
+_gaussian_blur_cache: dict = {}
+
+
 def gaussian_smoothing(input_tensor: torch.Tensor, blur_sigma: float) -> torch.Tensor:
-    """Apply Gaussian blur to a tensor."""
+    """Apply Gaussian blur to a tensor. GaussianBlur objects are cached to avoid re-computing kernels."""
     with torch.set_grad_enabled(False):
-        kernel_width = int(blur_sigma * 2.54) + 1 
+        kernel_width = int(blur_sigma * 2.54) + 1
         if kernel_width % 2 == 0:
             kernel_width += 1
-        return transforms.GaussianBlur(kernel_width, blur_sigma)(input_tensor)
+        key = (kernel_width, blur_sigma)
+        if key not in _gaussian_blur_cache:
+            _gaussian_blur_cache[key] = transforms.GaussianBlur(kernel_width, blur_sigma)
+        return _gaussian_blur_cache[key](input_tensor)
 
 
 def deformation_loss(vector_field: torch.Tensor,

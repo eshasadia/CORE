@@ -210,30 +210,24 @@ def apply_deformation_to_points(points, deformation_field):
     warped_points[:, 1] = points[:, 1] + disp_at_points_y
 
     return warped_points
-def create_displacement_field_for_wsi(transform_matrix, source_thumbnail, target_thumbnail):    
+def create_displacement_field_for_wsi(transform_matrix, source_thumbnail, target_thumbnail):
     # Use the larger dimensions to avoid cropping issues
     max_height = max(source_thumbnail.shape[0], target_thumbnail.shape[0])
     max_width = max(source_thumbnail.shape[1], target_thumbnail.shape[1])
-    
-    # Create coordinate grid at the chosen dimensions
-    y_coords, x_coords = np.mgrid[0:max_height, 0:max_width]
-    
-    # Convert to homogeneous coordinates for transformation
-    coords_homogeneous = np.stack([
-        x_coords.flatten(), 
-        y_coords.flatten(), 
-        np.ones(x_coords.size)
-    ], axis=0)
-    
+
+    # Create float32 coordinate grids (halves memory vs float64)
+    x_coords, y_coords = np.meshgrid(
+        np.arange(max_width, dtype=np.float32),
+        np.arange(max_height, dtype=np.float32)
+    )
+
+    # Apply inverse transform directly without constructing the 3×(H*W) homogeneous matrix
     transform_inv = np.linalg.inv(transform_matrix)
-    transformed_coords = transform_inv @ coords_homogeneous
-    
-    # Reshape back to 2D grids
-    source_x = transformed_coords[0].reshape(max_height, max_width)
-    source_y = transformed_coords[1].reshape(max_height, max_width)
-    
-    u_x = source_x - x_coords
-    u_y = source_y - y_coords
+    tx = (transform_inv[0, 0] * x_coords + transform_inv[0, 1] * y_coords + transform_inv[0, 2]).astype(np.float32)
+    ty = (transform_inv[1, 0] * x_coords + transform_inv[1, 1] * y_coords + transform_inv[1, 2]).astype(np.float32)
+
+    u_x = tx - x_coords
+    u_y = ty - y_coords
     # Stack into displacement field (H, W, 2)
     displacement_field = np.stack((u_x, u_y), axis=-1)
     return displacement_field
@@ -402,16 +396,19 @@ def warp_image(image, u_x, u_y):
 
 def matrix_mha(image, matrix):
     y_size, x_size = np.shape(image)
-    x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
-    points = np.vstack((x_grid.ravel(), y_grid.ravel(), np.ones(np.shape(image)).ravel()))
-    transformed_points = matrix @ points
-    u_x = np.reshape(transformed_points[0, :], (y_size, x_size)) - x_grid
-    u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
+    x_grid, y_grid = np.meshgrid(np.arange(x_size, dtype=np.float32),
+                                  np.arange(y_size, dtype=np.float32))
+    # Apply affine directly without allocating a 3×(H*W) homogeneous matrix
+    tx = matrix[0, 0] * x_grid + matrix[0, 1] * y_grid + matrix[0, 2]
+    ty = matrix[1, 0] * x_grid + matrix[1, 1] * y_grid + matrix[1, 2]
+    u_x = tx - x_grid
+    u_y = ty - y_grid
     return u_x, u_y
 
 def combine_deformation(u_x, u_y, v_x, v_y):
     y_size, x_size = np.shape(u_x)
-    grid_x, grid_y = np.meshgrid(np.arange(x_size), np.arange(y_size))
+    grid_x, grid_y = np.meshgrid(np.arange(x_size, dtype=np.float32),
+                                   np.arange(y_size, dtype=np.float32))
     added_y = grid_y + v_y
     added_x = grid_x + v_x
     t_x = nd.map_coordinates(grid_x + u_x, [added_y, added_x], mode='constant', cval=0.0)
@@ -437,22 +434,15 @@ def apply_displacement_field(image, displacement_field):
     """
     h, w = image.shape[:2]
     grid_y, grid_x = np.mgrid[0:h, 0:w]
-    
-    # Add displacement to grid coordinates
-    coords_y = grid_y + displacement_field[1]
-    coords_x = grid_x + displacement_field[0]
-    
-    # Stack coordinates for mapping
-    coords = np.stack([coords_y, coords_x], axis=0)
-    
-    # Apply mapping to each channel
-    if len(image.shape) == 3:
-        warped_image = np.zeros_like(image)
-        for c in range(image.shape[2]):
-            warped_image[:, :, c] = nd.map_coordinates(image[:, :, c], coords, order=1)
-    else:
-        warped_image = nd.map_coordinates(image, coords, order=1)
-    
+
+    # Compute absolute sampling coordinates as float32 maps for cv2.remap
+    map_x = (grid_x + displacement_field[0]).astype(np.float32)
+    map_y = (grid_y + displacement_field[1]).astype(np.float32)
+
+    # cv2.remap handles both single- and multi-channel images natively (C backend, much faster)
+    warped_image = cv2.remap(image, map_x, map_y, cv2.INTER_LINEAR,
+                              borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
     return warped_image
 
 # ------------------------
@@ -502,16 +492,15 @@ def mse(fixed, moving):
     """
     if len(fixed) == 0 or len(moving) == 0:
         print("Warning: One or both point sets are empty. Returning inf for MSE.")
-        return float('inf') 
-    else:
-        # Match fixed and moving point set.
-        moving = sort_coordinates(fixed, moving)
-        s = 0
-        # Calculate euclidean distances between matched points.
-        for f, m in zip(fixed, moving):
-            s += (f[0]-m[0][0][0])**2 + (f[1]-m[0][0][1])**2
-        # Calculates MSE value and return value
-        mse_value = s/len(fixed)
+        return float('inf')
+
+    set1 = np.array([[coord[0], coord[1]] for coord in fixed])
+    set2 = np.array([[coord[0], coord[1]] for coord in moving])
+
+    # Batch kneighbors query — avoids per-point Python loop in sort_coordinates
+    knn = NearestNeighbors(n_neighbors=1, algorithm='auto').fit(set2)
+    distances, _ = knn.kneighbors(set1)
+    mse_value = np.mean(distances ** 2)
 
     return mse_value
 
@@ -632,11 +621,13 @@ def resample_displacement_field(u_x, u_y, output_x_size, output_y_size):
 
 def matrix_df(image, matrix):
     y_size, x_size, _ = np.shape(image)
-    x_grid, y_grid = np.meshgrid(np.arange(x_size), np.arange(y_size))
-    points = np.vstack((x_grid.ravel(), y_grid.ravel(), np.ones_like(x_grid).ravel()))
-    transformed_points = matrix @ points
-    u_x = np.reshape(transformed_points[0, :], (y_size, x_size)) - x_grid
-    u_y = np.reshape(transformed_points[1, :], (y_size, x_size)) - y_grid
+    x_grid, y_grid = np.meshgrid(np.arange(x_size, dtype=np.float32),
+                                  np.arange(y_size, dtype=np.float32))
+    # Apply affine directly without allocating a 3×(H*W) homogeneous matrix
+    tx = matrix[0, 0] * x_grid + matrix[0, 1] * y_grid + matrix[0, 2]
+    ty = matrix[1, 0] * x_grid + matrix[1, 1] * y_grid + matrix[1, 2]
+    u_x = tx - x_grid
+    u_y = ty - y_grid
     return u_x, u_y
     
 def load_image_as_grayscale(path):

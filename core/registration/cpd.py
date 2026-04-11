@@ -90,10 +90,10 @@ class CPD:
         var = 1 / (D * N * M) * np.sum(cdist(X, Y, metric='euclidean')**2)
         # EM optimization
         for iteration in range(max_iterations):
-            # E-step: Compute P
-            P = np.zeros((M, N))
-            for n in range(N):
-                P[:, n] = np.exp(-1 / (2 * var) * np.sum((X[n] - self.transform(Y, *theta))**2, axis=1))
+            # E-step: Compute P (fully vectorized — avoids Python loop over N)
+            T = self.transform(Y, *theta)  # (M, D)
+            diff = X[np.newaxis, :, :] - T[:, np.newaxis, :]  # (M, N, D)
+            P = np.exp(-1 / (2 * var) * np.sum(diff ** 2, axis=2))  # (M, N)
             P /= np.sum(P, axis=0) + (2 * np.pi * var)**(D / 2) * w / (1 - w) * M / N
             if self.method == 'nonrigid':
                 # M-step: Solve for W, var
@@ -207,8 +207,9 @@ class CPD:
             var:                float
                                 Isotropic covariances.
         '''
-        diag_P_inv = np.linalg.inv(np.diag(np.sum(P, axis=1)))
-        W = np.linalg.inv(G + lmbda * var * diag_P_inv) @ (diag_P_inv @ P @ X - Y)
+        diag_vals = np.sum(P, axis=1)          # (M,) — avoid O(M²) matrix allocation
+        diag_P_inv = 1.0 / diag_vals
+        W = np.linalg.inv(G + lmbda * var * np.diag(diag_P_inv)) @ (diag_P_inv[:, np.newaxis] * P @ X - Y)
         N_P = np.sum(P)
         T = self.transform(Y, G, W)
         D = X.shape[1]

@@ -7,7 +7,7 @@ import numpy as np
 import open3d as o3d
 from sklearn.neighbors import NearestNeighbors
 from pycpd import DeformableRegistration
-from scipy.interpolate import griddata
+from scipy.interpolate import griddata, LinearNDInterpolator
 from scipy.ndimage import gaussian_filter
 from scipy.spatial import KDTree
 from scipy.optimize import minimize
@@ -65,9 +65,13 @@ def find_mutual_nearest_neighbors(fixed_points, moving_points):
     nn_moving_to_fixed = NearestNeighbors(n_neighbors=1).fit(fixed_points)
     dist2, idx2 = nn_moving_to_fixed.kneighbors(moving_points)
 
-    mnn_pairs = [(i, j[0]) for i, j in enumerate(idx1) if idx2[j[0]][0] == i]
-    fixed_mnn = np.array([fixed_points[i] for i, _ in mnn_pairs])
-    moving_mnn = np.array([moving_points[j] for _, j in mnn_pairs])
+    # Vectorized mutual nearest neighbor extraction (avoids Python list comprehensions)
+    idx1_flat = idx1.flatten()   # shape (N,) — nearest moving neighbour for each fixed point
+    idx2_flat = idx2.flatten()   # shape (M,) — nearest fixed neighbour for each moving point
+    mutual = idx2_flat[idx1_flat] == np.arange(len(fixed_points))
+    fixed_mnn = fixed_points[mutual]
+    moving_mnn = moving_points[idx1_flat[mutual]]
+    mnn_pairs = list(zip(np.where(mutual)[0].tolist(), idx1_flat[mutual].tolist()))
 
     print(f"Matched MNN pairs: {len(mnn_pairs)}")
     return fixed_mnn, moving_mnn, mnn_pairs
@@ -96,21 +100,31 @@ def create_displacement_field(source_points, transformed_points, image_shape,
                               method='linear', sigma=10.0, max_displacement=10.0):
     """
     Generate dense displacement field from sparse non-rigid registration results.
+    Uses float32 arrays and LinearNDInterpolator for reduced memory and faster interpolation.
     """
-    displacements = transformed_points - source_points
+    displacements = (transformed_points - source_points).astype(np.float32)
     height, width = image_shape[:2] if len(image_shape) == 3 else image_shape
 
     y_coords, x_coords = np.mgrid[0:height, 0:width]
-    grid_points = np.vstack((x_coords.ravel(), y_coords.ravel())).T
+    grid_points = np.column_stack((x_coords.ravel(), y_coords.ravel()))
 
-    dx_grid = griddata(source_points, displacements[:, 0], grid_points, method=method, fill_value=0).reshape(height, width)
-    dy_grid = griddata(source_points, displacements[:, 1], grid_points, method=method, fill_value=0).reshape(height, width)
+    src_f32 = source_points.astype(np.float32)
 
-    dx_field = gaussian_filter(dx_grid, sigma=sigma)
-    dy_field = gaussian_filter(dy_grid, sigma=sigma)
+    if method == 'linear':
+        # LinearNDInterpolator is faster than griddata for repeated queries on the same triangulation
+        interp_x = LinearNDInterpolator(src_f32, displacements[:, 0], fill_value=0.0)
+        interp_y = LinearNDInterpolator(src_f32, displacements[:, 1], fill_value=0.0)
+        dx_grid = interp_x(grid_points).reshape(height, width).astype(np.float32)
+        dy_grid = interp_y(grid_points).reshape(height, width).astype(np.float32)
+    else:
+        dx_grid = griddata(src_f32, displacements[:, 0], grid_points, method=method, fill_value=0).reshape(height, width).astype(np.float32)
+        dy_grid = griddata(src_f32, displacements[:, 1], grid_points, method=method, fill_value=0).reshape(height, width).astype(np.float32)
+
+    dx_field = gaussian_filter(dx_grid, sigma=sigma).astype(np.float32)
+    dy_field = gaussian_filter(dy_grid, sigma=sigma).astype(np.float32)
 
     magnitude = np.sqrt(dx_field**2 + dy_field**2)
-    scale = np.minimum(1.0, max_displacement / (magnitude + 1e-8))
+    scale = np.minimum(np.float32(1.0), np.float32(max_displacement) / (magnitude + np.float32(1e-8)))
     dx_field *= scale
     dy_field *= scale
 
