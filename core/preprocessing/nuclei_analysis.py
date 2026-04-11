@@ -40,6 +40,7 @@ def extract_patches_from_wsi(wsi, mask, patch_size=(1000, 1000), stride=(1000, 1
 def detect_nuclei_patch_watershed(img, min_area=25):
     """
     Detect nuclei in a patch using watershed and estimate area via contours.
+
     Returns:
         nuclei_stats: list of dicts {'area': area}
         nuclei_centroids: np.array of centroids [[x1, y1], [x2, y2], ...]
