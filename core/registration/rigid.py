@@ -134,7 +134,7 @@ class Trimorph:
         all_transform = []
 
         # Downsample masks for the exhaustive rotation search to reduce warp cost (~16× faster)
-        SEARCH_SCALE = 4
+        SEARCH_SCALE = 1
         small_fixed_mask = cv2.resize(fixed_mask,
                                        (fixed_mask.shape[1] // SEARCH_SCALE,
                                         fixed_mask.shape[0] // SEARCH_SCALE),
