@@ -1,3 +1,6 @@
+# Sphinx docs build output
+docs/_build/
+
 # Python cache
 __pycache__/
 *.py[cod]
