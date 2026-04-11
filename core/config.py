@@ -2,8 +2,9 @@
 Configuration file for CORE
 """
 import os
-# Set the API key for Vision Agent 
-os.environ["VISION_AGENT_API_KEY"] = ""
+# Set the API key for Vision Agent only if not already present in the environment
+if "VISION_AGENT_API_KEY" not in os.environ:
+    os.environ["VISION_AGENT_API_KEY"] = ""
 # File paths
 SOURCE_WSI_PATH=''
 TARGET_WSI_PATH=''

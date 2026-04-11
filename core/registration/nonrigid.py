@@ -2,8 +2,6 @@ import torch as t
 import torch.nn.functional as tfun
 import torchvision.transforms as trans
 import torch.optim as topt
-import torch as tc
-import torch.nn.functional as F
 from typing import Optional, Tuple, List, Union, Dict, Any
 import numpy as np
 import math
@@ -94,21 +92,18 @@ def compute_normalized_cross_correlation(sources: t.Tensor,
     ndim = len(sources.size()) - 2
     if ndim not in [2, 3]:
         raise ValueError("Unsupported number of dimensions.")
-    try:
-        size =7
-    except:
-        size = 3
-   
+    size = config_params.get('size', 7)
+
     window = (size, ) * ndim
     if device is None:
-        sum_filt = tc.ones([1, 1, *window]).type_as(sources)
+        sum_filt = t.ones([1, 1, *window]).type_as(sources)
     else:
-        sum_filt = tc.ones([1, 1, *window], device=device)
+        sum_filt = t.ones([1, 1, *window], device=device)
 
     pad_no = math.floor(window[0] / 2)
     stride = ndim * (1,)
     padding = ndim * (pad_no,)
-    conv_fn = getattr(F, 'conv%dd' % ndim)
+    conv_fn = getattr(tfun, 'conv%dd' % ndim)
     sources_denom = sources**2
     targets_denom = targets**2
     numerator = sources*targets
@@ -124,7 +119,7 @@ def compute_normalized_cross_correlation(sources: t.Tensor,
     sources_var = sources_denom_sum - 2 * u_sources * sources_sum + u_sources * u_sources * size
     targets_var = targets_denom_sum - 2 * u_targets * targets_sum + u_targets * u_targets * size
     ncc = cross * cross / (sources_var * targets_var + 1e-5)
-    return -tc.mean(ncc)
+    return -t.mean(ncc)
 
 
 def apply_deformation_field(input_tensor: t.Tensor, 
@@ -251,8 +246,8 @@ def prepare_image_tensors(source_image: np.ndarray,
     tensor_target = convert_image_to_tensor(gray_target, compute_device)
 
     # Create tensors with gradient tracking
-    source_tensor = t.tensor(tensor_source, dtype=t.float32, requires_grad=True).to(compute_device)
-    target_tensor = t.tensor(tensor_target, dtype=t.float32, requires_grad=True).to(compute_device)
+    source_tensor = tensor_source.clone().detach().to(dtype=t.float32, device=compute_device).requires_grad_(True)
+    target_tensor = tensor_target.clone().detach().to(dtype=t.float32, device=compute_device).requires_grad_(True)
 
     return source_tensor, target_tensor
 
@@ -268,7 +263,7 @@ def elastic_image_registration(
 ) -> Tuple[t.Tensor, t.Tensor]:
     # Setup
     device = t.device(compute_device) if isinstance(compute_device, str) else compute_device
-    src_t, tgt_t = prepare_image_tensors(source, target, device)
+    # Resize source to match target dimensions (preserving reflect border) before building pyramids
     aligned_source = cv2.warpAffine(source, np.eye(2, 3), (target.shape[1], target.shape[0]), borderMode=cv2.BORDER_REFLECT)
     source_t, target_t = prepare_image_tensors(aligned_source, target, device)
 
@@ -322,8 +317,9 @@ def elastic_image_registration(
         prev_def_field = def_field
 
     # Upsample to original shape if needed
-    final_def = scale_deformation_field(prev_def_field, (src_t.size(2), src_t.size(3))) if pyramid_levels != pyramid_levels else prev_def_field
-    final_warped = apply_deformation_field(src_t, final_def, compute_device=device)
+    final_def = scale_deformation_field(prev_def_field, (source_t.size(2), source_t.size(3))) \
+        if tuple(prev_def_field.shape[1:3]) != (source_t.size(2), source_t.size(3)) else prev_def_field
+    final_warped = apply_deformation_field(source_t, final_def, compute_device=device)
 
     # # Save outputs if needed
     # if output_dir:

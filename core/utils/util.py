@@ -721,22 +721,6 @@ def deform_conversion(displacement_field_tc: torch.Tensor):
         displacement_field_np[2, :, :, :] = temp_df_copy[0, :, :, :] / 2.0 * (shape[3])
     return displacement_field_np
 
-def combine_deformation(u_x, u_y, v_x, v_y):
-    y_size, x_size = np.shape(u_x)
-    print("u_x shape: ", u_x.shape)
-    grid_x, grid_y = np.meshgrid(np.arange(x_size), np.arange(y_size))
-    added_y = grid_y + v_y
-    added_x = grid_x + v_x
-    t_x = nd.map_coordinates(grid_x + u_x, [added_y, added_x], mode='constant', cval=0.0)
-    t_y = nd.map_coordinates(grid_y + u_y, [added_y, added_x], mode='constant', cval=0.0)
-    n_x, n_y = t_x - grid_x, t_y - grid_y
-    indexes_x = np.logical_or(added_x >= x_size - 1, added_x <= 0)
-    indexes_y = np.logical_or(added_y >= y_size - 1, added_y <= 0)
-    indexes = np.logical_or(indexes_x, indexes_y)
-    n_x[indexes] = 0.0
-    n_y[indexes] = 0.0
-    return n_x, n_y
-
 def gaussian_filter(image, sigma):
     return nd.gaussian_filter(image, sigma)
 

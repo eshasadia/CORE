@@ -244,9 +244,6 @@ def pad_to_same_size(image_1: np.ndarray, image_2: np.ndarray, pad_value: float 
         'pad_1': pad_1,
         'pad_2': pad_2
     }
-    padded_image_1=gamma_corrections(padded_image_1,1)
-    padded_image_2=gamma_corrections(padded_image_2,0.4)
-    print("gamma corrected")
     return padded_image_1, padded_image_2, padding_params
 
 
