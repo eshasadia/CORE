@@ -2,6 +2,7 @@
 Registration algorithms for WSI alignment
 """
 
+import logging
 import cv2
 import numpy as np
 import open3d as o3d
@@ -13,6 +14,9 @@ from scipy.spatial import KDTree
 from scipy.optimize import minimize
 import core.registration.rigid as rigid
 import pandas as pd
+from core.config import RegistrationParams
+
+logger = logging.getLogger(__name__)
 
 # ---------------------- Rigid Registration ---------------------- #
 
@@ -55,10 +59,22 @@ def perform_shape_aware_registration(fixed_df, moving_df, shape_attribute='area'
 
 # ---------------------- Mutual Nearest Neighbors ---------------------- #
 
-def find_mutual_nearest_neighbors(fixed_points, moving_points):
+def find_mutual_nearest_neighbors(fixed_points, moving_points,
+                                   sample_size: int = RegistrationParams.MNN_SAMPLE_SIZE):
     """
     Find mutual nearest neighbors (MNN) between two point sets.
+
+    If either set exceeds *sample_size*, a random subsample is drawn first to
+    keep memory and compute costs manageable.
     """
+    rng = np.random.default_rng(seed=42)
+    if len(fixed_points) > sample_size:
+        idx = rng.choice(len(fixed_points), size=sample_size, replace=False)
+        fixed_points = fixed_points[idx]
+    if len(moving_points) > sample_size:
+        idx = rng.choice(len(moving_points), size=sample_size, replace=False)
+        moving_points = moving_points[idx]
+
     nn_fixed_to_moving = NearestNeighbors(n_neighbors=1).fit(moving_points)
     dist1, idx1 = nn_fixed_to_moving.kneighbors(fixed_points)
 
@@ -73,7 +89,7 @@ def find_mutual_nearest_neighbors(fixed_points, moving_points):
     moving_mnn = moving_points[idx1_flat[mutual]]
     mnn_pairs = list(zip(np.where(mutual)[0].tolist(), idx1_flat[mutual].tolist()))
 
-    print(f"Matched MNN pairs: {len(mnn_pairs)}")
+    logger.info("Matched MNN pairs: %d", len(mnn_pairs))
     return fixed_mnn, moving_mnn, mnn_pairs
 
 # ---------------------- CPD Non-Rigid Registration ---------------------- #
@@ -82,6 +98,13 @@ def perform_cpd_registration(moving_points, fixed_points, beta=0.5, alpha=0.01,
                              max_iterations=200, tolerance=1e-9):
     """
     Perform Coherent Point Drift (CPD) non-rigid registration.
+
+    Returns:
+        tuple: (transformed_points, convergence_info)
+            - transformed_points (np.ndarray): Registered moving points.
+            - convergence_info (dict): Dictionary with keys ``'q'`` (final
+              objective value) and ``'iterations'`` (number of EM iterations
+              completed).
     """
     reg = DeformableRegistration(
         X=moving_points,
@@ -92,7 +115,16 @@ def perform_cpd_registration(moving_points, fixed_points, beta=0.5, alpha=0.01,
         tol=tolerance
     )
     reg.register()
-    return reg.TY
+    convergence_info = {
+        'q': getattr(reg, 'q', None),
+        'iterations': getattr(reg, 'iteration', None),
+    }
+    logger.info(
+        "CPD registration complete — iterations: %s, objective q: %s",
+        convergence_info['iterations'],
+        convergence_info['q'],
+    )
+    return reg.TY, convergence_info
 
 # ---------------------- Displacement Field ---------------------- #
 
@@ -173,8 +205,7 @@ def perform_icp_registration(moving_points, fixed_points, threshold=50000.0):
         o3d.pipelines.registration.TransformationEstimationPointToPoint()
     )
 
-    print("ICP Transformation Matrix:")
-    print(reg_p2p.transformation)
+    logger.info("ICP Transformation Matrix:\n%s", reg_p2p.transformation)
 
     # Apply transformation to moving points
     moving_points_hom = np.hstack([

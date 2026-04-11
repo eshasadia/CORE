@@ -1,3 +1,6 @@
+import functools
+import logging
+import os
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -9,6 +12,28 @@ import cv2
 from skimage import color
 from pathlib import Path
 from tqdm.auto import tqdm
+from core.config import PREPROCESSING_RESOLUTION, REGISTRATION_RESOLUTION
+
+logger = logging.getLogger(__name__)
+
+# Scale factor relating coarse (preprocessing) resolution to fine (registration) resolution.
+# Used to convert nuclei coordinates between the two resolution spaces.
+_RESOLUTION_SCALE: float = PREPROCESSING_RESOLUTION / REGISTRATION_RESOLUTION
+
+
+@functools.lru_cache(maxsize=32)
+def _make_gaussian_blur(kernel_width: int, blur_sigma: float) -> transforms.GaussianBlur:
+    """Return a cached GaussianBlur transform for the given parameters."""
+    return transforms.GaussianBlur(kernel_width, blur_sigma)
+
+
+def gaussian_smoothing(input_tensor: torch.Tensor, blur_sigma: float) -> torch.Tensor:
+    """Apply Gaussian blur to a tensor. GaussianBlur objects are cached to avoid re-computing kernels."""
+    with torch.set_grad_enabled(False):
+        kernel_width = int(blur_sigma * 2.54) + 1
+        if kernel_width % 2 == 0:
+            kernel_width += 1
+        return _make_gaussian_blur(kernel_width, blur_sigma)(input_tensor)
 
 
 def initialize_deformation_field(input_tensor: torch.Tensor) -> torch.Tensor:
@@ -25,39 +50,21 @@ def build_reference_coordinate_system(input_tensor: Optional[torch.Tensor] = Non
     """Build a reference coordinate grid for the given tensor dimensions."""
     if input_tensor is not None:
         dimensions = input_tensor.size()
-    
+
     # Convert string device specification to torch.device
     if isinstance(compute_device, str):
         compute_device = torch.device(compute_device)
-    
+
     if compute_device is None and input_tensor is not None:
         base_transform = torch.eye(len(dimensions)-1)[:-1, :].unsqueeze(0).type_as(input_tensor)
     else:
         base_transform = torch.eye(len(dimensions)-1, device=compute_device)[:-1, :].unsqueeze(0)
-    
+
     base_transform = torch.repeat_interleave(base_transform, dimensions[0], dim=0)
     coordinate_grid = F.affine_grid(base_transform, dimensions, align_corners=False)
-    
+
     return coordinate_grid
 
-
-# Module-level cache for GaussianBlur instances keyed by (kernel_width, sigma)
-_gaussian_blur_cache: dict = {}
-
-
-def gaussian_smoothing(input_tensor: torch.Tensor, blur_sigma: float) -> torch.Tensor:
-    """Apply Gaussian blur to a tensor. GaussianBlur objects are cached to avoid re-computing kernels."""
-    with torch.set_grad_enabled(False):
-        kernel_width = int(blur_sigma * 2.54) + 1
-        if kernel_width % 2 == 0:
-            kernel_width += 1
-        key = (kernel_width, blur_sigma)
-        if key not in _gaussian_blur_cache:
-            _gaussian_blur_cache[key] = transforms.GaussianBlur(kernel_width, blur_sigma)
-        return _gaussian_blur_cache[key](input_tensor)
-
-
-def deformation_loss(vector_field: torch.Tensor,
                                compute_device: torch.device = torch.device("cuda"),
                                weight_map: Optional[torch.Tensor] = None) -> torch.Tensor:
     dim_count = len(vector_field.size()) - 2
@@ -325,10 +332,11 @@ def elastic_image_registration(
         if tuple(prev_def_field.shape[1:3]) != (source_t.size(2), source_t.size(3)) else prev_def_field
     final_warped = apply_deformation_field(source_t, final_def, compute_device=device)
 
-    # # Save outputs if needed
-    # if output_dir:
-    #     os.makedirs(output_dir, exist_ok=True)
-    #     cv2.imwrite(os.path.join(output_dir, "final_warped.png"), (final_warped.detach().cpu().numpy()[0, 0] * 255).astype(np.uint8))
+    if save_intermediate and output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        warped_np = (final_warped.detach().cpu().numpy()[0, 0] * 255).astype(np.uint8)
+        cv2.imwrite(os.path.join(output_dir, "final_warped.png"), warped_np)
+        logger.info("Saved intermediate warped image to %s", output_dir)
 
     return final_def, final_warped
 
@@ -390,19 +398,20 @@ def compute_deformation_and_apply(
     r_x, r_y = util.compose_vector_fields(i_x, i_y, disp_field_np[0], disp_field_np[1])
     deformation_field = np.stack((r_x, r_y), axis=0)
 
-    print("Deformation field shape:", deformation_field.shape)
+    logger.info("Deformation field shape: %s", deformation_field.shape)
 
     # Step 3: Prepare landmark coordinates
-    moving_points = moving_df[['global_x', 'global_y']].values / 64
-    fixed_points = fixed_df[['global_x', 'global_y']].values / 64
+    # Scale from full-resolution pixel space down to the coarse registration resolution.
+    moving_points = moving_df[['global_x', 'global_y']].values * _RESOLUTION_SCALE
+    fixed_points = fixed_df[['global_x', 'global_y']].values * _RESOLUTION_SCALE
     moving_points, fixed_points = pad_landmarks(padding_params, moving_points, fixed_points)
 
     # Step 4: Apply deformation
     moving_updated = util.apply_deformation_to_points(moving_points, deformation_field)
 
     # Step 5: Scale back to original pixel space
-    fixed_points = fixed_points * 64
-    moving_points = moving_points * 64
-    moving_updated = moving_updated * 64
+    fixed_points = fixed_points / _RESOLUTION_SCALE
+    moving_points = moving_points / _RESOLUTION_SCALE
+    moving_updated = moving_updated / _RESOLUTION_SCALE
 
     return deformation_field, moving_updated, fixed_points, moving_points

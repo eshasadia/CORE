@@ -1,6 +1,7 @@
 import os
 import cv2
 import math
+import logging
 import pandas as pd
 import matplotlib.pyplot as plt
 import SimpleITK as sitk
@@ -14,8 +15,11 @@ from sklearn.cluster import KMeans
 from scipy import ndimage as nd
 from scipy.ndimage import map_coordinates
 from tiatoolbox.utils.metrics import dice
-from tiatoolbox import logger, rcParam
+from tiatoolbox import logger as _tia_logger, rcParam
 from scipy.interpolate import griddata
+from core.config import PREPROCESSING_RESOLUTION, REGISTRATION_RESOLUTION
+
+logger = logging.getLogger(__name__)
 
 RGB_IMAGE_DIM = 3
 BIN_MASK_DIM = 2
@@ -65,8 +69,10 @@ def create_deformation_field(shape_transform, source_prep, u_x, u_y, util, outpu
         The resulting deformation field as a SimpleITK image.
     """
 
-    # Define scale factor
-    scale_factor = 0.625 / 40  # equivalent to 0.015625
+    # Scale factor: ratio of preprocessing resolution to full registration resolution.
+    # This converts landmark / transformation coordinates from the fine registration
+    # space (e.g., 40x) down to the coarse preprocessing space (e.g., 0.625x).
+    scale_factor = PREPROCESSING_RESOLUTION / REGISTRATION_RESOLUTION
 
     # Scale the translation components of the transformation matrix
     transform_3x3_scaled = shape_transform.copy()
@@ -102,7 +108,7 @@ def create_nonrigid_mha(
     and saves it as an .mha file (using fr_x, fr_y as final field).
     """
 
-    print("Creating displacement field...")
+    logger.info("Creating displacement field...")
 
     # Scale for numerical stability
     scale_factor = 64
@@ -491,7 +497,7 @@ def mse(fixed, moving):
         float: Mean Square error.
     """
     if len(fixed) == 0 or len(moving) == 0:
-        print("Warning: One or both point sets are empty. Returning inf for MSE.")
+        logger.warning("Warning: One or both point sets are empty. Returning inf for MSE.")
         return float('inf')
 
     set1 = np.array([[coord[0], coord[1]] for coord in fixed])
@@ -759,10 +765,10 @@ def print_rtre(source_landmarks, target_landmarks, x_size, y_size):
     median = np.median(calculated_tre) * 100
     mmax = np.max(calculated_tre) * 100
     mmin = np.min(calculated_tre) * 100
-    print("TRE mean [%]: ", mean)
-    print("TRE median [%]: ", median)
-    print("TRE max [%]: ", mmax)
-    print("TRE min [%]: ", mmin)
+    logger.info("TRE mean [%%]: %s", mean)
+    logger.info("TRE median [%%]: %s", median)
+    logger.info("TRE max [%%]: %s", mmax)
+    logger.info("TRE min [%%]: %s", mmin)
     return mean, median, mmax, mmin
 
 

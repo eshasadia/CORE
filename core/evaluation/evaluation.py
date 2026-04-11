@@ -2,10 +2,13 @@
 Evaluation functions for registration quality assessment
 """
 
+import logging
 import numpy as np
 import pandas as pd
 from scipy.ndimage import map_coordinates
 from skimage import color
+
+logger = logging.getLogger(__name__)
 
 
 # -----------------------------
@@ -252,5 +255,5 @@ def ngf_metric(fixed_image, moving_image, epsilon=0.01):
     dot_product = fx_norm * mx_norm + fy_norm * my_norm
     ngf = np.mean(dot_product**2)
     
-    print("NGF metric:", ngf)
+    logger.debug("NGF metric: %f", ngf)
     return ngf

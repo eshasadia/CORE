@@ -1,12 +1,18 @@
 """
 Preprocessing functions for WSI registration
 """
+import logging
 import numpy as np
 import cv2
 import math
+from pathlib import Path
 from tiatoolbox.wsicore.wsireader import WSIReader, VirtualWSIReader
 import core.preprocessing.tissuemask as tissuemask
-import core.preprocessing.preprocessing as prep  # Original preprocessing module
+import core.preprocessing.stainnorm as prep
+
+logger = logging.getLogger(__name__)
+
+
 def load_wsi_images(source_path, target_path, resolution=0.625, data='', obj_power=''):
     """
     Load source and target WSI images
@@ -20,7 +26,17 @@ def load_wsi_images(source_path, target_path, resolution=0.625, data='', obj_pow
 
     Returns:
         tuple: (source_wsi, target_wsi, source_image, target_image)
+
+    Raises:
+        FileNotFoundError: If either WSI path does not exist on disk.
     """
+    for label, path in (("source", source_path), ("target", target_path)):
+        if not Path(path).exists():
+            raise FileNotFoundError(
+                f"The {label} WSI file was not found: {path!r}. "
+                "Please check the path and try again."
+            )
+
     if data == 'anhir':
         target_wsi = VirtualWSIReader.open(target_path)
         source_wsi = VirtualWSIReader.open(source_path)
@@ -42,29 +58,42 @@ def load_wsi_images(source_path, target_path, resolution=0.625, data='', obj_pow
         source = load_slide(source_path, resolution)
         target = load_slide(target_path, resolution)
         
-        print(f"Source original shape: {source.shape}")
-        print(f"Target original shape: {target.shape}")
+        logger.info("Source original shape: %s", source.shape)
+        logger.info("Target original shape: %s", target.shape)
     
     return source_wsi, target_wsi, source, target
 
 
-def preprocess_images(source, target):
+def preprocess_images(source, target, normalize_stain: bool = False):
     """
-    Preprocess source and target images
-    
+    Preprocess source and target images.
+
     Args:
-        source: Source image array
-        target: Target image array
-        
+        source: Source image array (RGB, uint8).
+        target: Target image array (RGB, uint8).
+        normalize_stain: When True, apply Macenko stain normalization to both
+            images so that colour differences caused by staining variation do
+            not interfere with the coarse registration step.
+
     Returns:
         tuple: (source_prep, target_prep)
     """
- 
-    source_prep, target_prep = source, target
-    
-    print(f"Source preprocessed shape: {source_prep.shape}")
-    print(f"Target preprocessed shape: {target_prep.shape}")
-    
+    if normalize_stain:
+        normalizer = prep.StainNormalizer()
+        try:
+            source_prep, _, _ = normalizer.process(source)
+        except Exception:
+            source_prep = source
+        try:
+            target_prep, _, _ = normalizer.process(target)
+        except Exception:
+            target_prep = target
+    else:
+        source_prep, target_prep = source, target
+
+    logger.info("Source preprocessed shape: %s", source_prep.shape)
+    logger.info("Target preprocessed shape: %s", target_prep.shape)
+
     return source_prep, target_prep
 
 
@@ -329,8 +358,8 @@ def process_nuclei_patch(img, threshold, gamma=None, min_area=200):
     Returns:
         tuple: (binary_image, stats, centroids)
     """
-    # Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Convert to grayscale (WSI images are loaded as RGB)
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     
     # Apply gamma correction if specified
     if gamma is not None:
