@@ -1,8 +1,5 @@
-# Sample workflow for building and deploying a mdBook site to GitHub Pages
-#
-# To get started with mdBook see: https://rust-lang.github.io/mdBook/index.html
-#
-name: Deploy mdBook site to Pages
+# Workflow for building and deploying Sphinx documentation to GitHub Pages
+name: Deploy Sphinx docs to Pages
 
 on:
   # Runs on pushes targeting the default branch
@@ -28,24 +25,23 @@ jobs:
   # Build job
   build:
     runs-on: ubuntu-latest
-    env:
-      MDBOOK_VERSION: 0.4.36
     steps:
       - uses: actions/checkout@v4
-      - name: Install mdBook
-        run: |
-          curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf -y | sh
-          rustup update
-          cargo install --version ${MDBOOK_VERSION} mdbook
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Sphinx dependencies
+        run: pip install -r docs/requirements.txt
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v5
-      - name: Build with mdBook
-        run: mdbook build
+      - name: Build Sphinx docs
+        run: sphinx-build -b html docs docs/_build/html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./book
+          path: docs/_build/html
 
   # Deployment job
   deploy:
