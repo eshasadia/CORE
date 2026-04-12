@@ -1704,7 +1704,7 @@ def plot_results(
     output_dir: str,
     has_landmarks: bool,
 ) -> None:
-    """Create and save bar-chart summaries for key metrics."""
+    """Create and save all comparison plots for the ablation study."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1716,7 +1716,7 @@ def plot_results(
     os.makedirs(output_dir, exist_ok=True)
     labels = [r.label for r in results]
 
-    # ── Image-quality metrics ──────────────────────────────────────────────
+    # ── 1. Image-quality metrics bar chart ────────────────────────────────
     img_metrics = {
         "NGF ↑": [r.ngf for r in results],
         "NCC ↑": [r.ncc for r in results],
@@ -1730,7 +1730,7 @@ def plot_results(
         path=os.path.join(output_dir, "ablation_image_quality.png"),
     )
 
-    # ── Timing ────────────────────────────────────────────────────────────
+    # ── 2. Runtime bar chart ──────────────────────────────────────────────
     time_data = {
         "Total": [r.time_total_s for r in results],
         "Rigid": [r.time_rigid_s for r in results],
@@ -1745,7 +1745,7 @@ def plot_results(
         fill_nan=0.0,
     )
 
-    # ── Landmark metrics (optional) ───────────────────────────────────────
+    # ── 3. Landmark error bar chart (optional) ────────────────────────────
     if has_landmarks:
         lm_metrics = {
             "TRE mean (px) ↓": [r.tre_mean for r in results],
@@ -1758,6 +1758,26 @@ def plot_results(
             ylabel="Error (lower is better)",
             path=os.path.join(output_dir, "ablation_landmark_error.png"),
         )
+
+    # ── 4. Normalized metric heatmap ──────────────────────────────────────
+    _heatmap_chart(
+        results,
+        path=os.path.join(output_dir, "ablation_heatmap.png"),
+        has_landmarks=has_landmarks,
+    )
+
+    # ── 5. Quality vs. time scatter ───────────────────────────────────────
+    _scatter_quality_vs_time(
+        results,
+        path=os.path.join(output_dir, "ablation_quality_vs_time.png"),
+    )
+
+    # ── 6. Per-metric ranked horizontal bars ──────────────────────────────
+    _ranked_hbar_chart(
+        results,
+        path=os.path.join(output_dir, "ablation_ranked_metrics.png"),
+        has_landmarks=has_landmarks,
+    )
 
     print(f"Plots saved to: {output_dir}")
 
@@ -1796,6 +1816,267 @@ def _bar_chart(
     ax.grid(axis="y", alpha=0.4)
     fig.tight_layout()
     fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def _heatmap_chart(
+    results: List[MethodResult],
+    path: str,
+    has_landmarks: bool,
+) -> None:
+    """
+    Normalized metric heatmap (methods × metrics).
+
+    Each column is independently min-max normalized to [0, 1] so that
+    different scales are comparable side-by-side.  For "lower is better"
+    metrics (TRE, rTRE, Time) the normalization is inverted so that the
+    brightest cell always indicates the *best* performer.
+
+    Cells with no data (NaN) are shown in grey.
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as mcolors
+
+    # Define which metrics to show and whether lower is better
+    metric_defs: List[Tuple[str, bool]] = [
+        ("NGF ↑",          False),   # higher = better → normalize as-is
+        ("NCC ↑",          False),
+        ("SSIM ↑",         False),
+        ("DICE mask ↑",    False),
+        ("Time total (s)", True),    # lower = better → invert
+    ]
+    if has_landmarks:
+        metric_defs += [
+            ("TRE mean (px) ↓",    True),
+            ("TRE median (px) ↓",  True),
+            ("rTRE mean ↓",        True),
+        ]
+
+    # Attribute names on MethodResult corresponding to each metric
+    attr_map = {
+        "NGF ↑":           "ngf",
+        "NCC ↑":           "ncc",
+        "SSIM ↑":          "ssim_score",
+        "DICE mask ↑":     "dice_mask",
+        "Time total (s)":  "time_total_s",
+        "TRE mean (px) ↓":   "tre_mean",
+        "TRE median (px) ↓": "tre_median",
+        "rTRE mean ↓":       "rtre_mean",
+    }
+
+    labels = [r.label for r in results]
+    n_methods = len(results)
+    n_metrics = len(metric_defs)
+
+    # Build raw matrix (n_methods × n_metrics)
+    raw = np.full((n_methods, n_metrics), np.nan)
+    for j, (col_name, _) in enumerate(metric_defs):
+        attr = attr_map[col_name]
+        for i, r in enumerate(results):
+            raw[i, j] = getattr(r, attr)
+
+    # Normalize each column independently
+    norm = np.full_like(raw, np.nan)
+    for j, (_, lower_is_better) in enumerate(metric_defs):
+        col = raw[:, j]
+        valid = ~np.isnan(col)
+        if valid.sum() < 2:
+            norm[:, j] = col
+            continue
+        lo, hi = col[valid].min(), col[valid].max()
+        if hi == lo:
+            norm[valid, j] = 1.0
+        else:
+            norm[valid, j] = (col[valid] - lo) / (hi - lo)
+            if lower_is_better:
+                norm[valid, j] = 1.0 - norm[valid, j]
+
+    # Plot
+    col_labels = [name for name, _ in metric_defs]
+    fig, ax = plt.subplots(
+        figsize=(max(8, n_metrics * 1.2), max(4, n_methods * 0.55))
+    )
+
+    cmap = plt.get_cmap("RdYlGn")
+    cmap.set_bad(color="#cccccc")
+    masked = np.ma.array(norm, mask=np.isnan(norm))
+    im = ax.imshow(masked, aspect="auto", cmap=cmap, vmin=0, vmax=1)
+
+    ax.set_xticks(np.arange(n_metrics))
+    ax.set_xticklabels(col_labels, rotation=30, ha="right", fontsize=9)
+    ax.set_yticks(np.arange(n_methods))
+    ax.set_yticklabels(labels, fontsize=9)
+    ax.set_title(
+        "Method Comparison Heatmap\n(green = best, red = worst per column; grey = N/A)",
+        fontsize=11,
+    )
+
+    # Annotate cells with raw values
+    for i in range(n_methods):
+        for j in range(n_metrics):
+            v = raw[i, j]
+            txt = "N/A" if np.isnan(v) else f"{v:.3f}"
+            brightness = norm[i, j] if not np.isnan(norm[i, j]) else 0.5
+            text_color = "black" if 0.25 < brightness < 0.85 else "white"
+            ax.text(j, i, txt, ha="center", va="center", fontsize=7, color=text_color)
+
+    plt.colorbar(im, ax=ax, label="Normalized score (1 = best)", fraction=0.02, pad=0.01)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def _scatter_quality_vs_time(
+    results: List[MethodResult],
+    path: str,
+) -> None:
+    """
+    Scatter plot of registration quality (NCC on y-axis, SSIM on secondary
+    y-axis) versus total wall-clock time (log-scale x-axis).
+
+    Each method is a labeled point.  Methods that failed (NaN time or NCC)
+    are omitted from this plot.
+    """
+    import matplotlib.pyplot as plt
+
+    valid = [r for r in results if not np.isnan(r.time_total_s) and not np.isnan(r.ncc)]
+    if not valid:
+        return
+
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+    ax2 = ax1.twinx()
+
+    times  = np.array([r.time_total_s for r in valid])
+    nccs   = np.array([r.ncc          for r in valid])
+    ssims  = np.array([r.ssim_score   for r in valid])
+
+    # Use a categorical color map so each method gets a distinct colour.
+    # Generate evenly-spaced hues via HSV when there are more than 20 methods.
+    n_valid = len(valid)
+    if n_valid <= 20:
+        cmap = plt.get_cmap("tab20")
+        colors = [cmap(i % 20) for i in range(n_valid)]
+    else:
+        cmap = plt.get_cmap("hsv")
+        colors = [cmap(i / n_valid) for i in range(n_valid)]
+
+    for i, r in enumerate(valid):
+        ax1.scatter(r.time_total_s, r.ncc, color=colors[i], s=80, zorder=3)
+        if not np.isnan(r.ssim_score):
+            ax2.scatter(r.time_total_s, r.ssim_score, color=colors[i],
+                        marker="^", s=60, zorder=3, alpha=0.7)
+        # Label offset to avoid overlapping the point
+        ax1.annotate(
+            r.label,
+            (r.time_total_s, r.ncc),
+            textcoords="offset points",
+            xytext=(5, 3),
+            fontsize=7,
+            color=colors[i],
+        )
+
+    ax1.set_xscale("log")
+    ax1.set_xlabel("Total registration time (s, log scale)", fontsize=10)
+    ax1.set_ylabel("NCC ↑ (circles)", fontsize=10, color="black")
+    ax2.set_ylabel("SSIM ↑ (triangles)", fontsize=10, color="dimgrey")
+    ax1.set_title("Quality vs. Runtime Trade-off", fontsize=12)
+    ax1.grid(True, which="both", alpha=0.3)
+
+    # Legend: one entry per method
+    handles = [
+        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor=colors[i],
+                   markersize=8, label=r.label)
+        for i, r in enumerate(valid)
+    ]
+    ax1.legend(handles=handles, fontsize=7, loc="lower right", ncol=2,
+               framealpha=0.85)
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
+def _ranked_hbar_chart(
+    results: List[MethodResult],
+    path: str,
+    has_landmarks: bool,
+) -> None:
+    """
+    One horizontal-bar subplot per key metric, methods sorted best → worst.
+
+    This makes it easy to see which method wins on each individual criterion.
+    """
+    import matplotlib.pyplot as plt
+
+    metric_specs: List[Tuple[str, str, bool]] = [
+        # (attr, display_name, lower_is_better)
+        ("ncc",        "NCC ↑",          False),
+        ("ssim_score", "SSIM ↑",         False),
+        ("ngf",        "NGF ↑",          False),
+        ("dice_mask",  "DICE mask ↑",    False),
+        ("time_total_s", "Time total (s) ↓", True),
+    ]
+    if has_landmarks:
+        metric_specs += [
+            ("tre_mean",   "TRE mean (px) ↓",  True),
+            ("rtre_mean",  "rTRE mean ↓",       True),
+        ]
+
+    n_plots = len(metric_specs)
+    fig, axes = plt.subplots(
+        1, n_plots,
+        figsize=(n_plots * 3.5, max(4, len(results) * 0.45)),
+        sharey=False,
+    )
+    if n_plots == 1:
+        axes = [axes]
+
+    cmap = plt.get_cmap("RdYlGn")
+
+    for ax, (attr, title, lower_is_better) in zip(axes, metric_specs):
+        # Filter to methods with valid data
+        pairs = [
+            (getattr(r, attr), r.label)
+            for r in results
+            if not np.isnan(getattr(r, attr))
+        ]
+        if not pairs:
+            ax.set_title(title, fontsize=9)
+            ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=8)
+            ax.axis("off")
+            continue
+
+        # Sort: ascending for lower-is-better, descending otherwise
+        pairs.sort(key=lambda x: x[0], reverse=not lower_is_better)
+        vals, lbls = zip(*pairs)
+        vals = np.array(vals, dtype=float)
+
+        # Color bars: normalize within the visible range
+        lo, hi = vals.min(), vals.max()
+        if hi > lo:
+            norm_vals = (vals - lo) / (hi - lo)
+        else:
+            norm_vals = np.ones_like(vals)
+        # For lower-is-better invert so green = smallest
+        if lower_is_better:
+            bar_colors = [cmap(1.0 - v) for v in norm_vals]
+        else:
+            bar_colors = [cmap(v) for v in norm_vals]
+
+        y = np.arange(len(vals))
+        ax.barh(y, vals, color=bar_colors, edgecolor="white", linewidth=0.5)
+        ax.set_yticks(y)
+        ax.set_yticklabels(lbls, fontsize=7)
+        ax.invert_yaxis()   # best at the top
+        ax.set_title(title, fontsize=9)
+        ax.set_xlabel("Value", fontsize=7)
+        ax.tick_params(axis="x", labelsize=7)
+        ax.grid(axis="x", alpha=0.35)
+
+    fig.suptitle("Per-Metric Method Ranking (best at top)", fontsize=12, y=1.01)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
