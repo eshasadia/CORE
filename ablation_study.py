@@ -18,6 +18,20 @@ Systematically compares:
      9.  ORB + RANSAC Affine     – OpenCV keypoint-based
      10. AKAZE + RANSAC Affine   – OpenCV keypoint-based (patent-free)
 
+  C) Point-based methods
+     11. SIFT + RANSAC Affine    – OpenCV SIFT keypoint-based
+     12. ICP (Open3D)            – Iterative Closest Point on tissue masks
+     13. CPD Rigid               – Coherent Point Drift (rigid)
+     14. CPD Affine              – Coherent Point Drift (affine)
+     15. CPD Non-rigid           – Coherent Point Drift (deformable)
+
+  D) External registration toolboxes (require binaries on PATH)
+     16. Elastix Affine          – elastix + AdvancedMattesMutualInformation affine
+     17. Elastix B-Spline        – elastix + B-spline non-rigid (FinalGridSpacing=16 px)
+     18. NiftyReg Affine         – reg_aladin rigid/affine
+     19. NiftyReg B-Spline       – reg_aladin (init) → reg_f3d free-form deformation
+     20. DROP Deformable         – DROP2/DROP discrete-optimisation deformable
+
 Metrics (computed whenever applicable)
   - TRE   – Target Registration Error (pixels, mean/median/std/max)
   - rTRE  – Relative TRE (mean/median)
@@ -49,13 +63,21 @@ Before running
   conda env create -f environment.yml
   conda activate core
   export VISION_AGENT_API_KEY="<your-key>"
+
+  # Optional: install external toolboxes for methods 16–20
+  #   Elastix : https://elastix.lumc.nl/  (elastix + transformix on PATH)
+  #   NiftyReg: https://github.com/KCL-BMEIS/niftyreg  (reg_aladin + reg_f3d on PATH)
+  #   DROP    : https://www.mrf-registration.net/deformable/  (DROP2 or DROP on PATH)
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -134,6 +156,12 @@ ALL_METHODS = [
     "cpd_rigid",
     "cpd_affine",
     "cpd_nonrigid",
+    # ── External registration toolboxes ─────────────────────────────────
+    "elastix_affine",
+    "elastix_bspline",
+    "niftyreg_affine",
+    "niftyreg_f3d",
+    "drop",
 ]
 
 # Human-readable labels for tables / plots
@@ -154,6 +182,12 @@ METHOD_LABELS: Dict[str, str] = {
     "cpd_rigid":         "CPD Rigid",
     "cpd_affine":        "CPD Affine",
     "cpd_nonrigid":      "CPD Non-rigid",
+    # ── External registration toolboxes ─────────────────────────────────
+    "elastix_affine":    "Elastix Affine",
+    "elastix_bspline":   "Elastix B-Spline",
+    "niftyreg_affine":   "NiftyReg Affine (reg_aladin)",
+    "niftyreg_f3d":      "NiftyReg B-Spline (reg_f3d)",
+    "drop":              "DROP Deformable",
 }
 
 
@@ -874,6 +908,83 @@ def _warp_mask_displacement(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Helpers shared by external-tool runners (Elastix, NiftyReg, DROP)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _save_mhd(img_rgb: np.ndarray, path: str) -> None:
+    """Write an RGB uint8 array to disk as a grayscale float32 MHD/MHA image."""
+    gray = (color.rgb2gray(img_rgb) * 255.0).astype(np.float32)
+    sitk.WriteImage(sitk.GetImageFromArray(gray), path)
+
+
+def _load_warped_mhd(path: str) -> np.ndarray:
+    """
+    Load a registered grayscale image (any SimpleITK-readable format) and
+    return it as a uint8 RGB ndarray suitable for metric computation.
+    """
+    sitk_img = sitk.ReadImage(path)
+    arr = sitk.GetArrayFromImage(sitk_img).astype(np.float32)
+    if arr.ndim == 3:           # strip leading singleton axis if present
+        arr = arr[0]
+    lo, hi = arr.min(), arr.max()
+    if hi > lo:
+        arr = (arr - lo) / (hi - lo) * 255.0
+    arr = arr.clip(0, 255).astype(np.uint8)
+    return np.stack([arr, arr, arr], axis=-1)
+
+
+def _run_cmd(cmd: List[str], cwd: Optional[str] = None) -> Tuple[int, str, str]:
+    """
+    Run *cmd* as a subprocess and return ``(returncode, stdout, stderr)``.
+    Raises ``RuntimeError`` if the executable is not found on PATH.
+    """
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, cwd=cwd,
+        )
+        return proc.returncode, proc.stdout, proc.stderr
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"Executable not found: {cmd[0]!r}. "
+            "Please install the tool and ensure it is on your PATH."
+        )
+
+
+def _load_mhd_displacement(path: str) -> np.ndarray:
+    """
+    Load a vector-field image (H, W, 2) from *path* via SimpleITK.
+    Returns a float32 ndarray in pixel-space (x, y) order.
+    """
+    sitk_field = sitk.ReadImage(path)
+    arr = sitk.GetArrayFromImage(sitk_field).astype(np.float32)
+    # SimpleITK stores vector images as (H, W, nComponents) after GetArrayFromImage
+    if arr.ndim == 3 and arr.shape[-1] >= 2:
+        return arr[..., :2]
+    raise RuntimeError(
+        f"Unexpected displacement field shape {arr.shape} in {path!r}."
+    )
+
+
+def _read_niftyreg_affine_matrix(path: str) -> np.ndarray:
+    """
+    Read a NiftyReg affine text file (4×4 matrix) and return the upper-left
+    3×3 sub-matrix suitable for ``_warp_landmarks_affine``.
+    """
+    mat = np.loadtxt(path)   # (4, 4)
+    return mat[:3, :3].copy()
+
+
+def _niftyreg_affine_to_2x3(path: str) -> np.ndarray:
+    """
+    Read a NiftyReg affine text file and return the 2×3 OpenCV warpAffine
+    matrix that maps source → target coordinates.
+    """
+    mat4x4 = np.loadtxt(path)  # (4, 4)
+    # NiftyReg stores world-space affine; assume unit voxel spacing (pixel = voxel)
+    return mat4x4[:2, [0, 1, 3]].astype(np.float64)   # rows 0-1, cols x/y/tx
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Point-based method helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1140,8 +1251,410 @@ def run_cpd_nonrigid(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Landmark loading
+# External-tool baselines: Elastix, NiftyReg, DROP
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Elastix parameter-file templates
+_ELASTIX_PARAM_AFFINE = """\
+(Transform "AffineTransform")
+(NumberOfHistogramBins 32)
+(Metric "AdvancedMattesMutualInformation")
+(NumberOfResolutions 3)
+(MaximumNumberOfIterations 500)
+(Interpolator "LinearInterpolator")
+(ResampleInterpolator "FinalLinearInterpolator")
+(Resampler "DefaultResampler")
+(ImageSampler "RandomCoordinate")
+(NumberOfSpatialSamples 2048)
+(CheckNumberOfSamples "false")
+(HowToCombineTransforms "Compose")
+(AutomaticScalesEstimation "true")
+(AutomaticTransformInitialization "true")
+(WriteTransformParametersEachIteration "false")
+(WriteResultImage "true")
+(ResultImageFormat "mhd")
+(ResultImagePixelType "float")
+"""
+
+_ELASTIX_PARAM_BSPLINE = """\
+(Transform "BSplineTransform")
+(NumberOfHistogramBins 32)
+(Metric "AdvancedMattesMutualInformation")
+(NumberOfResolutions 3)
+(MaximumNumberOfIterations 500)
+(Interpolator "LinearInterpolator")
+(ResampleInterpolator "FinalLinearInterpolator")
+(Resampler "DefaultResampler")
+(ImageSampler "RandomCoordinate")
+(NumberOfSpatialSamples 2048)
+(CheckNumberOfSamples "false")
+(HowToCombineTransforms "Compose")
+(FinalGridSpacingInPhysicalUnits 16.0)
+(GridSpacingSchedule 4.0 2.0 1.0)
+(WriteTransformParametersEachIteration "false")
+(WriteResultImage "true")
+(ResultImageFormat "mhd")
+(ResultImagePixelType "float")
+"""
+
+
+def _run_elastix(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+    param_content: str,
+    method_key: str,
+) -> MethodResult:
+    """
+    Generic Elastix runner.  Writes source/target to a temp directory, calls
+    ``elastix``, reads back the warped result, and optionally calls
+    ``transformix --def all`` to obtain a dense displacement field for
+    landmark warping.
+
+    Parameters
+    ----------
+    param_content : str
+        Text content of the Elastix parameter file (affine or B-spline).
+    method_key : str
+        Key in ``ALL_METHODS`` used to populate ``MethodResult``.
+    """
+    result = MethodResult(method=method_key, label=METHOD_LABELS[method_key])
+    t0 = time.perf_counter()
+    tmp = tempfile.mkdtemp(prefix="elastix_")
+    try:
+        fixed_path  = os.path.join(tmp, "fixed.mhd")
+        moving_path = os.path.join(tmp, "moving.mhd")
+        param_path  = os.path.join(tmp, "param.txt")
+        out_dir     = os.path.join(tmp, "out")
+        os.makedirs(out_dir, exist_ok=True)
+
+        _save_mhd(target, fixed_path)
+        _save_mhd(source, moving_path)
+        with open(param_path, "w") as fh:
+            fh.write(param_content)
+
+        rc, stdout, stderr = _run_cmd([
+            "elastix",
+            "-f", fixed_path,
+            "-m", moving_path,
+            "-out", out_dir,
+            "-p", param_path,
+        ])
+        if rc != 0:
+            raise RuntimeError(
+                f"elastix exited with code {rc}.\nstderr: {stderr.strip()}"
+            )
+
+        result_img_path = os.path.join(out_dir, "result.0.mhd")
+        warped = _load_warped_mhd(result_img_path)
+        result.time_total_s = time.perf_counter() - t0
+
+        # Warp mask via affine approximation (cheapest fallback)
+        warped_mask = source_mask.copy()   # default: no change
+
+        # Optional: run transformix to get dense displacement field
+        tp_path = os.path.join(out_dir, "TransformParameters.0.txt")
+        if os.path.isfile(tp_path):
+            tf_out = os.path.join(tmp, "tf_out")
+            os.makedirs(tf_out, exist_ok=True)
+            rc2, _, stderr2 = _run_cmd([
+                "transformix",
+                "-in", moving_path,
+                "-out", tf_out,
+                "-def", "all",
+                "-tp", tp_path,
+            ])
+            def_path = os.path.join(tf_out, "deformationField.mhd")
+            if rc2 == 0 and os.path.isfile(def_path):
+                disp_hw2 = _load_mhd_displacement(def_path)
+                warped_mask = _warp_mask_displacement(source_mask, disp_hw2)
+                if fixed_lm is not None and moving_lm is not None:
+                    warped_lm = _warp_landmarks_displacement(moving_lm, disp_hw2)
+                    _compute_landmark_metrics(fixed_lm, warped_lm, target.shape, result)
+
+        _compute_image_metrics(target, warped, target_mask, warped_mask, result)
+    except Exception as exc:
+        result.note = str(exc)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return result
+
+
+# ── 16. Elastix Affine ────────────────────────────────────────────────────────
+
+def run_elastix_affine(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """Elastix affine registration (AdvancedMattesMutualInformation metric)."""
+    return _run_elastix(
+        source, target, source_mask, target_mask, fixed_lm, moving_lm,
+        param_content=_ELASTIX_PARAM_AFFINE,
+        method_key="elastix_affine",
+    )
+
+
+# ── 17. Elastix B-Spline ──────────────────────────────────────────────────────
+
+def run_elastix_bspline(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """Elastix B-spline non-rigid registration (FinalGridSpacing = 16 px)."""
+    return _run_elastix(
+        source, target, source_mask, target_mask, fixed_lm, moving_lm,
+        param_content=_ELASTIX_PARAM_BSPLINE,
+        method_key="elastix_bspline",
+    )
+
+
+# ── 18. NiftyReg Affine (reg_aladin) ─────────────────────────────────────────
+
+def run_niftyreg_affine(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """
+    NiftyReg rigid/affine registration using ``reg_aladin``.
+
+    The output affine matrix (4×4 text file) is used both to warp the image
+    and to propagate landmarks when provided.
+    """
+    result = MethodResult(method="niftyreg_affine", label=METHOD_LABELS["niftyreg_affine"])
+    t0 = time.perf_counter()
+    tmp = tempfile.mkdtemp(prefix="niftyreg_aff_")
+    try:
+        ref_path    = os.path.join(tmp, "ref.mhd")
+        flo_path    = os.path.join(tmp, "flo.mhd")
+        res_path    = os.path.join(tmp, "res.mhd")
+        aff_path    = os.path.join(tmp, "affine.txt")
+
+        _save_mhd(target, ref_path)
+        _save_mhd(source, flo_path)
+
+        rc, stdout, stderr = _run_cmd([
+            "reg_aladin",
+            "-ref", ref_path,
+            "-flo", flo_path,
+            "-res", res_path,
+            "-aff", aff_path,
+        ])
+        if rc != 0:
+            raise RuntimeError(
+                f"reg_aladin exited with code {rc}.\nstderr: {stderr.strip()}"
+            )
+
+        warped = _load_warped_mhd(res_path)
+        result.time_total_s = time.perf_counter() - t0
+
+        # Build 2×3 affine matrix for mask / landmark warping
+        if os.path.isfile(aff_path):
+            M = _niftyreg_affine_to_2x3(aff_path)
+            warped_mask = _warp_mask(source_mask, M)
+            if fixed_lm is not None and moving_lm is not None:
+                M3 = np.vstack([M, [0, 0, 1]])
+                warped_lm = _warp_landmarks_affine(moving_lm, np.linalg.inv(M3))
+                _compute_landmark_metrics(fixed_lm, warped_lm, target.shape, result)
+        else:
+            warped_mask = source_mask.copy()
+
+        _compute_image_metrics(target, warped, target_mask, warped_mask, result)
+    except Exception as exc:
+        result.note = str(exc)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return result
+
+
+# ── 19. NiftyReg B-Spline (reg_f3d) ──────────────────────────────────────────
+
+def run_niftyreg_f3d(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """
+    NiftyReg free-form deformation using ``reg_f3d``.
+
+    Initialised with an affine pre-registration (``reg_aladin``) for
+    robustness.  Landmark metrics are skipped because extracting a
+    dense displacement field from the control-point grid would require
+    ``reg_resample`` (available if NiftyReg is installed but not mandatory
+    for the image-quality subset of metrics).
+    """
+    result = MethodResult(method="niftyreg_f3d", label=METHOD_LABELS["niftyreg_f3d"])
+    t0 = time.perf_counter()
+    tmp = tempfile.mkdtemp(prefix="niftyreg_f3d_")
+    try:
+        ref_path = os.path.join(tmp, "ref.mhd")
+        flo_path = os.path.join(tmp, "flo.mhd")
+        aff_path = os.path.join(tmp, "init_affine.txt")
+        res_path = os.path.join(tmp, "res_f3d.mhd")
+        cpp_path = os.path.join(tmp, "cpp.nii")
+
+        _save_mhd(target, ref_path)
+        _save_mhd(source, flo_path)
+
+        # Step 1: affine initialisation
+        rc, _, stderr = _run_cmd([
+            "reg_aladin",
+            "-ref", ref_path, "-flo", flo_path,
+            "-res", os.path.join(tmp, "aff_res.mhd"),
+            "-aff", aff_path,
+        ])
+        if rc != 0:
+            raise RuntimeError(
+                f"reg_aladin (init) exited with code {rc}.\nstderr: {stderr.strip()}"
+            )
+
+        # Step 2: non-rigid F3D
+        cmd_f3d = [
+            "reg_f3d",
+            "-ref", ref_path, "-flo", flo_path,
+            "-res", res_path,
+            "-cpp", cpp_path,
+        ]
+        if os.path.isfile(aff_path):
+            cmd_f3d += ["-aff", aff_path]
+
+        rc2, _, stderr2 = _run_cmd(cmd_f3d)
+        if rc2 != 0:
+            raise RuntimeError(
+                f"reg_f3d exited with code {rc2}.\nstderr: {stderr2.strip()}"
+            )
+
+        warped = _load_warped_mhd(res_path)
+        result.time_total_s = time.perf_counter() - t0
+
+        # Approximate mask warp with affine only (dense field not extracted here)
+        if os.path.isfile(aff_path):
+            M = _niftyreg_affine_to_2x3(aff_path)
+            warped_mask = _warp_mask(source_mask, M)
+        else:
+            warped_mask = source_mask.copy()
+
+        _compute_image_metrics(target, warped, target_mask, warped_mask, result)
+        # Landmark metrics skipped (dense CPP→displacement conversion not performed)
+        if fixed_lm is not None and moving_lm is not None:
+            result.note = "Landmark metrics skipped for reg_f3d (no dense field extracted)."
+    except Exception as exc:
+        result.note = str(exc)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return result
+
+
+# ── 20. DROP Deformable Registration ─────────────────────────────────────────
+
+def run_drop(
+    source: np.ndarray,
+    target: np.ndarray,
+    source_mask: np.ndarray,
+    target_mask: np.ndarray,
+    fixed_lm: Optional[np.ndarray],
+    moving_lm: Optional[np.ndarray],
+) -> MethodResult:
+    """
+    DROP (Deformable Registration using Discrete OPtimization).
+
+    Calls the ``DROP2`` binary (alias ``DROP`` is tried as a fallback).
+    DROP writes a dense MHD displacement field which is used to warp both
+    the image and – when provided – landmark coordinates.
+
+    Reference
+    ---------
+    Glocker et al., "Dense Image Registration through MRFs and Efficient
+    Linear Programming." MedIA, 2008.
+    """
+    result = MethodResult(method="drop", label=METHOD_LABELS["drop"])
+    t0 = time.perf_counter()
+    tmp = tempfile.mkdtemp(prefix="drop_")
+    try:
+        fixed_path  = os.path.join(tmp, "fixed.mhd")
+        moving_path = os.path.join(tmp, "moving.mhd")
+        out_prefix  = os.path.join(tmp, "drop_result")
+
+        _save_mhd(target, fixed_path)
+        _save_mhd(source, moving_path)
+
+        # Try DROP2 first, fall back to DROP
+        last_error: Optional[str] = None
+        success = False
+        for exe in ("DROP2", "DROP"):
+            try:
+                rc, stdout, stderr = _run_cmd([
+                    exe,
+                    fixed_path,
+                    moving_path,
+                    out_prefix,
+                ])
+            except RuntimeError as exc:
+                last_error = str(exc)
+                continue
+            if rc == 0:
+                success = True
+                break
+            last_error = f"{exe} exited with code {rc}.\nstderr: {stderr.strip()}"
+
+        if not success:
+            raise RuntimeError(
+                last_error or "Neither DROP2 nor DROP could be executed."
+            )
+
+        # DROP typically writes the warped image as <out_prefix>.mhd and the
+        # displacement field as <out_prefix>_disp.mhd (or similar naming).
+        warped_path = out_prefix + ".mhd"
+        disp_path   = out_prefix + "_disp.mhd"
+
+        if not os.path.isfile(warped_path):
+            # Some DROP builds write the registered image with a different name
+            candidates = [
+                f for f in os.listdir(tmp)
+                if f.endswith(".mhd") and "fixed" not in f and "moving" not in f
+                and "disp" not in f
+            ]
+            if candidates:
+                warped_path = os.path.join(tmp, candidates[0])
+            else:
+                raise RuntimeError(
+                    "DROP finished but no warped image found in the output directory."
+                )
+
+        warped = _load_warped_mhd(warped_path)
+        result.time_total_s = time.perf_counter() - t0
+
+        warped_mask = source_mask.copy()
+        if os.path.isfile(disp_path):
+            disp_hw2 = _load_mhd_displacement(disp_path)
+            warped_mask = _warp_mask_displacement(source_mask, disp_hw2)
+            if fixed_lm is not None and moving_lm is not None:
+                warped_lm = _warp_landmarks_displacement(moving_lm, disp_hw2)
+                _compute_landmark_metrics(fixed_lm, warped_lm, target.shape, result)
+
+        _compute_image_metrics(target, warped, target_mask, warped_mask, result)
+    except Exception as exc:
+        result.note = str(exc)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return result
 
 def load_landmarks(path: str) -> np.ndarray:
     """
@@ -1362,6 +1875,12 @@ def run_ablation(args: argparse.Namespace) -> pd.DataFrame:
         "cpd_rigid":         lambda: run_cpd_rigid(**shared_kwargs),
         "cpd_affine":        lambda: run_cpd_affine(**shared_kwargs),
         "cpd_nonrigid":      lambda: run_cpd_nonrigid(**shared_kwargs),
+        # ── External registration toolboxes ─────────────────────────────
+        "elastix_affine":    lambda: run_elastix_affine(**shared_kwargs),
+        "elastix_bspline":   lambda: run_elastix_bspline(**shared_kwargs),
+        "niftyreg_affine":   lambda: run_niftyreg_affine(**shared_kwargs),
+        "niftyreg_f3d":      lambda: run_niftyreg_f3d(**shared_kwargs),
+        "drop":              lambda: run_drop(**shared_kwargs),
     }
 
     for method_key in methods_to_run:
@@ -1451,7 +1970,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "  CORE ablation : baseline rigid_only elastic_only core_coarse core_full\n"
             "  SOTA          : phase_correlation itk_rigid_mi itk_demons\n"
             "                  orb_ransac akaze_ransac sift_ransac\n"
-            "  Point-based   : icp cpd_rigid cpd_affine cpd_nonrigid"
+            "  Point-based   : icp cpd_rigid cpd_affine cpd_nonrigid\n"
+            "  External tools: elastix_affine elastix_bspline\n"
+            "                  niftyreg_affine niftyreg_f3d drop\n"
+            "  (External tools require their respective binaries on PATH;\n"
+            "   if missing, the method is skipped with an informative note.)"
         ),
     )
     p.add_argument(
