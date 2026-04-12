@@ -1779,10 +1779,167 @@ def plot_results(
         has_landmarks=has_landmarks,
     )
 
+    # ── 7. Violin plots ───────────────────────────────────────────────────
+    _violin_chart(
+        results,
+        path=os.path.join(output_dir, "ablation_violin.png"),
+        has_landmarks=has_landmarks,
+    )
+
     print(f"Plots saved to: {output_dir}")
 
 
 _BAR_GROUP_OFFSET = 0.4   # centres the group of bars around each tick
+
+
+def _violin_chart(
+    results: List[MethodResult],
+    path: str,
+    has_landmarks: bool,
+) -> None:
+    """
+    Violin plot – one violin per key metric, showing the distribution of
+    values across all methods.
+
+    Each violin is overlaid with:
+    * a miniature box-plot (median bar + IQR box + whiskers)
+    * individual method dots (jittered horizontally) labelled on hover
+      – labels are added as annotations for the saved PNG instead.
+
+    When fewer than 4 valid data points are available for a metric the
+    violin is replaced by a plain box-plot so the chart is always useful.
+    """
+    import matplotlib.pyplot as plt
+
+    metric_specs: List[Tuple[str, str, bool]] = [
+        # (attr, display_name, lower_is_better)
+        ("ncc",          "NCC ↑",            False),
+        ("ssim_score",   "SSIM ↑",           False),
+        ("ngf",          "NGF ↑",            False),
+        ("dice_mask",    "DICE mask ↑",      False),
+        ("time_total_s", "Time total (s) ↓", True),
+    ]
+    if has_landmarks:
+        metric_specs += [
+            ("tre_mean",  "TRE mean (px) ↓", True),
+            ("rtre_mean", "rTRE mean ↓",      True),
+        ]
+
+    n_metrics = len(metric_specs)
+    fig, axes = plt.subplots(
+        1, n_metrics,
+        figsize=(n_metrics * 2.8, 5),
+        sharey=False,
+    )
+    if n_metrics == 1:
+        axes = [axes]
+
+    rng = np.random.default_rng(seed=42)  # reproducible jitter
+
+    for ax, (attr, title, lower_is_better) in zip(axes, metric_specs):
+        vals_all = np.array([
+            getattr(r, attr) for r in results
+            if not np.isnan(getattr(r, attr))
+        ], dtype=float)
+        labels_all = [
+            r.label for r in results
+            if not np.isnan(getattr(r, attr))
+        ]
+
+        if vals_all.size == 0:
+            ax.set_title(title, fontsize=9)
+            ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=8)
+            ax.axis("off")
+            continue
+
+        color = "#e07070" if lower_is_better else "#70b0e0"
+
+        if vals_all.size >= 4:
+            # Violin with embedded mini box-plot
+            vp = ax.violinplot(
+                vals_all,
+                positions=[1],
+                widths=0.6,
+                showmedians=False,
+                showextrema=False,
+            )
+            for body in vp["bodies"]:
+                body.set_facecolor(color)
+                body.set_alpha(0.55)
+                body.set_edgecolor("grey")
+                body.set_linewidth(0.8)
+
+            # Box-plot inset (no fliers – we draw our own dots)
+            bp = ax.boxplot(
+                vals_all,
+                positions=[1],
+                widths=0.12,
+                patch_artist=True,
+                showfliers=False,
+                medianprops=dict(color="black", linewidth=1.5),
+                boxprops=dict(facecolor="white", linewidth=0.8),
+                whiskerprops=dict(linewidth=0.8),
+                capprops=dict(linewidth=0.8),
+            )
+        else:
+            # Fallback: plain box-plot when too few points for a violin
+            bp = ax.boxplot(
+                vals_all,
+                positions=[1],
+                widths=0.4,
+                patch_artist=True,
+                showfliers=False,
+                medianprops=dict(color="black", linewidth=1.5),
+                boxprops=dict(facecolor=color, alpha=0.55, linewidth=0.8),
+                whiskerprops=dict(linewidth=0.8),
+                capprops=dict(linewidth=0.8),
+            )
+
+        # Jittered dots for each method
+        jitter = rng.uniform(-0.08, 0.08, size=vals_all.size)
+        ax.scatter(
+            np.ones(vals_all.size) + jitter,
+            vals_all,
+            s=30,
+            color="steelblue",
+            zorder=5,
+            alpha=0.85,
+            edgecolors="white",
+            linewidths=0.4,
+        )
+
+        # Annotate the best and worst dots (skip worst when identical)
+        best_idx = int(np.argmin(vals_all) if lower_is_better else np.argmax(vals_all))
+        worst_idx = int(np.argmax(vals_all) if lower_is_better else np.argmin(vals_all))
+        annotations = [(best_idx, "best")]
+        if worst_idx != best_idx:
+            annotations.append((worst_idx, "worst"))
+        for idx, tag in annotations:
+            ax.annotate(
+                labels_all[idx],
+                xy=(1 + jitter[idx], vals_all[idx]),
+                xytext=(8, 0),
+                textcoords="offset points",
+                fontsize=6,
+                color="darkgreen" if tag == "best" else "firebrick",
+                va="center",
+                arrowprops=dict(arrowstyle="-", color="grey", lw=0.5),
+            )
+
+        ax.set_title(title, fontsize=9)
+        ax.set_xticks([])
+        ax.tick_params(axis="y", labelsize=7)
+        ax.grid(axis="y", alpha=0.3)
+
+    fig.suptitle(
+        "Distribution of Metric Values Across Methods\n"
+        "(each dot = one method; best/worst labelled)",
+        fontsize=11,
+    )
+    fig.tight_layout()
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
 
 def _bar_chart(
