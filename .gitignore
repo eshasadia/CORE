@@ -42,7 +42,6 @@ coverage.xml
 *.svg
 *.png
 *.pdf
-!docs/_static/images/
 !docs/_static/images/*.png
 *_checkpoint.ipynb
 
