@@ -5,13 +5,11 @@ The fastest way to get started is to run the end-to-end notebooks inside
 the ``notebooks/`` folder.  The steps below show the minimal Python API.
 
 .. figure:: ../overall.png
-   :alt: Coarse-to-fine registration strategy
+   :alt: CORE pipeline overview
    :align: center
    :width: 100%
 
-   **Figure 1.** CORE's two-stage registration strategy.  The coarse stage performs rigid and
-   elastic alignment at low resolution; the fine stage refines cell-level correspondence using
-   nuclei point-sets and shape-aware coherent point drift (CPD).
+   **Figure 1.** CORE pipeline overview used as an illustrative reference in this quick start.
 
 1. Edit ``config.py``
 ---------------------
@@ -49,12 +47,11 @@ Set at least the two WSI paths and the desired resolutions:
 -----------------------
 
 .. figure:: ../overall.png
-   :alt: Prompt-based tissue masking
+   :alt: CORE pipeline overview
    :align: center
    :width: 95%
 
-   **Figure 2.** Prompt-based tissue segmentation.  VisionAgent uses a text prompt to isolate
-   the tissue region, producing a binary mask that is then used to guide registration.
+   **Figure 2.** CORE pipeline overview (illustrative).
 
 .. code-block:: python
 
@@ -119,13 +116,11 @@ nuclei CSV files with ``global_x`` and ``global_y`` columns.
 -----------
 
 .. figure:: ../overall.png
-   :alt: Target Registration Error before and after registration
+   :alt: CORE pipeline overview
    :align: center
    :width: 95%
 
-   **Figure 3.** Target Registration Error (TRE) before and after CORE registration.  Blue dots
-   are fixed landmark positions; crosses show the corresponding moving landmarks.  A good
-   registration brings the two sets of points into close agreement.
+   **Figure 3.** CORE pipeline overview (illustrative).
 
 .. code-block:: python
 
