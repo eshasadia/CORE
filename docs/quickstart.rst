@@ -4,7 +4,7 @@ Quick Start
 The fastest way to get started is to run the end-to-end notebooks inside
 the ``notebooks/`` folder.  The steps below show the minimal Python API.
 
-.. figure:: ../overall.png
+.. figure:: _static/images/overall.png
    :alt: CORE pipeline overview
    :align: center
    :width: 100%

@@ -8,7 +8,7 @@ multi-stain whole-slide images (WSIs).  It combines prompt-based tissue masking,
 alignment, and nuclei-level fine registration to deliver precise cell-level correspondence across
 stains.
 
-.. figure:: ../overall.png
+.. figure:: _static/images/overall.png
    :alt: CORE pipeline overview
    :align: center
    :width: 100%
