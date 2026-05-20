@@ -46,13 +46,6 @@ Set at least the two WSI paths and the desired resolutions:
 4. Extract tissue masks
 -----------------------
 
-.. figure:: ../overall.png
-   :alt: CORE pipeline overview
-   :align: center
-   :width: 95%
-
-   **Figure 2.** CORE pipeline overview (illustrative).
-
 .. code-block:: python
 
    from core.preprocessing.preprocessing import extract_tissue_masks
@@ -114,13 +107,6 @@ nuclei CSV files with ``global_x`` and ``global_y`` columns.
 
 8. Evaluate
 -----------
-
-.. figure:: ../overall.png
-   :alt: CORE pipeline overview
-   :align: center
-   :width: 95%
-
-   **Figure 3.** CORE pipeline overview (illustrative).
 
 .. code-block:: python
 
