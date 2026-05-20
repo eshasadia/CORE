@@ -4,7 +4,7 @@ Quick Start
 The fastest way to get started is to run the end-to-end notebooks inside
 the ``notebooks/`` folder.  The steps below show the minimal Python API.
 
-.. figure:: _static/images/coarse_fine_registration.png
+.. figure:: ../overall.png
    :alt: Coarse-to-fine registration strategy
    :align: center
    :width: 100%
@@ -48,7 +48,7 @@ Set at least the two WSI paths and the desired resolutions:
 4. Extract tissue masks
 -----------------------
 
-.. figure:: _static/images/tissue_mask_example.png
+.. figure:: ../overall.png
    :alt: Prompt-based tissue masking
    :align: center
    :width: 95%
@@ -118,7 +118,7 @@ nuclei CSV files with ``global_x`` and ``global_y`` columns.
 8. Evaluate
 -----------
 
-.. figure:: _static/images/evaluation_tre.png
+.. figure:: ../overall.png
    :alt: Target Registration Error before and after registration
    :align: center
    :width: 95%
