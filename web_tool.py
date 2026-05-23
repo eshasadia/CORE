@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import base64
 import traceback
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from bokeh.io import curdoc
@@ -94,7 +94,7 @@ def _run_registration() -> None:
         visualise = 0 in preview_toggle.active
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         stem = _wsi_stem(source_path)
         deformation_output = output_dir / f"{stem}_{stamp}_deformation_field.mha"
         wsi_output = output_dir / f"{stem}_{stamp}_registered.ome.tiff"
@@ -122,7 +122,8 @@ def _run_registration() -> None:
         )
 
         if visualise:
-            overlay_path = Path(str(wsi_output.with_suffix("")) + "_overlay.png")
+            overlay_base = wsi_output.with_suffix("")
+            overlay_path = overlay_base.parent / f"{overlay_base.name}_overlay.png"
             if overlay_path.exists():
                 encoded_png = _encode_image(overlay_path)
                 preview.text = (
