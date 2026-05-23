@@ -134,7 +134,7 @@ def _run_registration() -> None:
             else:
                 preview.text = "<p>Preview image was not generated.</p>"
 
-    except Exception as exc:  # noqa: BLE001
+    except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
         _set_error(str(exc), exc)
 
 
