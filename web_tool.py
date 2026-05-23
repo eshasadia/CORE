@@ -12,6 +12,7 @@ import binascii
 import traceback
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from bokeh.io import curdoc
 from bokeh.layouts import column, row
@@ -98,7 +99,9 @@ def _resolve_input_path(
         upload_dir = output_dir / "_uploads"
         upload_dir.mkdir(parents=True, exist_ok=True)
         upload_name = Path(upload_filename).name
-        upload_target = upload_dir / f"{datetime.now(UTC).strftime('%Y%m%d_%H%M%S%f')}_{label}_{upload_name}"
+        upload_target = upload_dir / (
+            f"{datetime.now(UTC).strftime('%Y%m%d_%H%M%S%f')}_{uuid4().hex[:8]}_{label}_{upload_name}"
+        )
         try:
             upload_target.write_bytes(base64.b64decode(upload_value))
         except (binascii.Error, ValueError) as exc:
@@ -150,10 +153,11 @@ def _run_registration() -> None:
         visualise = 0 in preview_toggle.active
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S%f")
+        run_id = uuid4().hex[:8]
         stem = _wsi_stem(source_path)
-        deformation_output = output_dir / f"{stem}_{stamp}_deformation_field.mha"
-        wsi_output = output_dir / f"{stem}_{stamp}_registered.ome.tiff"
+        deformation_output = output_dir / f"{stem}_{stamp}_{run_id}_deformation_field.mha"
+        wsi_output = output_dir / f"{stem}_{stamp}_{run_id}_registered.ome.tiff"
 
         status.text = "Running registration. This can take several minutes..."
         _run_pair(
