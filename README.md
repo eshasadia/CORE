@@ -88,8 +88,10 @@ Direct local link after launch:
 - http://localhost:5006/web_tool
 
 Then provide:
-- source and target WSI paths, or load both files via the upload buttons
+- source and target WSI inputs (you can use a path or upload button for each side)
 - output directory and registration parameters
+
+Note: both source and target must be provided before running (path+path, upload+upload, or mixed path/upload).
 
 The tool runs CORE registration and writes:
 - combined deformation field (`.mha`)

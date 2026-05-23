@@ -8,6 +8,7 @@ Run with:
 from __future__ import annotations
 
 import base64
+import binascii
 import traceback
 from datetime import UTC, datetime
 from pathlib import Path
@@ -97,10 +98,10 @@ def _resolve_input_path(
         upload_dir = output_dir / "_uploads"
         upload_dir.mkdir(parents=True, exist_ok=True)
         upload_name = Path(upload_filename).name
-        upload_target = upload_dir / f"{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{label}_{upload_name}"
+        upload_target = upload_dir / f"{datetime.now(UTC).strftime('%Y%m%d_%H%M%S%f')}_{label}_{upload_name}"
         try:
             upload_target.write_bytes(base64.b64decode(upload_value))
-        except Exception as exc:  # noqa: BLE001
+        except (binascii.Error, ValueError) as exc:
             raise ValueError(f"Failed to decode uploaded {label} file content.") from exc
         return str(upload_target)
     return path_value.strip()
