@@ -92,6 +92,7 @@ Then provide:
 - output directory and registration parameters
 
 Note: both source and target must be provided before running (path+path, upload+upload, or mixed path/upload).
+If either source or target is missing, the app will show a validation error and not start registration.
 
 The tool runs CORE registration and writes:
 - combined deformation field (`.mha`)

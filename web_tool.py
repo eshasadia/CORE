@@ -100,7 +100,7 @@ def _resolve_input_path(
         upload_dir.mkdir(parents=True, exist_ok=True)
         upload_name = Path(upload_filename).name
         upload_target = upload_dir / (
-            f"{datetime.now(UTC).strftime('%Y%m%d_%H%M%S%f')}_{uuid4().hex[:8]}_{label}_{upload_name}"
+            f"{label}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S%f')}_{uuid4().hex[:8]}_{upload_name}"
         )
         try:
             upload_target.write_bytes(base64.b64decode(upload_value))
@@ -156,8 +156,9 @@ def _run_registration() -> None:
         stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S%f")
         run_id = uuid4().hex[:8]
         stem = _wsi_stem(source_path)
-        deformation_output = output_dir / f"{stem}_{stamp}_{run_id}_deformation_field.mha"
-        wsi_output = output_dir / f"{stem}_{stamp}_{run_id}_registered.ome.tiff"
+        run_prefix = f"{stem}_{stamp}_{run_id}"
+        deformation_output = output_dir / f"{run_prefix}_deformation_field.mha"
+        wsi_output = output_dir / f"{run_prefix}_registered.ome.tiff"
 
         status.text = "Running registration. This can take several minutes..."
         _run_pair(
