@@ -90,6 +90,10 @@ def _encode_image(image_path: Path) -> str:
     return encoded
 
 
+def _build_output_name(prefix: str, stem: str, suffix: str) -> str:
+    return f"{prefix}_{stem}_{suffix}"
+
+
 def _resolve_input_path(
     label: str,
     path_value: str,
@@ -101,9 +105,8 @@ def _resolve_input_path(
         upload_dir = output_dir / "_uploads"
         upload_dir.mkdir(parents=True, exist_ok=True)
         upload_name = Path(upload_filename).name
-        upload_target = upload_dir / (
-            f"{label}_{datetime.now(UTC).strftime(TIMESTAMP_FORMAT)}_{uuid4().hex[:8]}_{upload_name}"
-        )
+        upload_prefix = f"{datetime.now(UTC).strftime(TIMESTAMP_FORMAT)}_{uuid4().hex[:8]}"
+        upload_target = upload_dir / _build_output_name(upload_prefix, label, upload_name)
         try:
             upload_target.write_bytes(base64.b64decode(upload_value))
         except (binascii.Error, ValueError) as exc:
@@ -134,7 +137,7 @@ def _run_registration() -> None:
 
         if not source_path or not target_path:
             raise ValueError(
-                "Please provide both source and target WSI paths or upload both files using the upload buttons."
+                "Please provide both source and target WSI (via path or upload for each)."
             )
 
         source_input.value = source_path
@@ -157,10 +160,10 @@ def _run_registration() -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(UTC).strftime(TIMESTAMP_FORMAT)
         run_id = uuid4().hex[:8]
+        run_prefix = f"{stamp}_{run_id}"
         stem = _wsi_stem(source_path)
-        run_prefix = f"{stem}_{stamp}_{run_id}"
-        deformation_output = output_dir / f"{run_prefix}_deformation_field.mha"
-        wsi_output = output_dir / f"{run_prefix}_registered.ome.tiff"
+        deformation_output = output_dir / _build_output_name(run_prefix, stem, "deformation_field.mha")
+        wsi_output = output_dir / _build_output_name(run_prefix, stem, "registered.ome.tiff")
 
         status.text = "Running registration. This can take several minutes..."
         _run_pair(
@@ -198,7 +201,7 @@ def _run_registration() -> None:
                 preview.text = "<p>Preview image was not generated.</p>"
 
     except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
-        _set_error(str(exc), exc)
+        _set_error(f"{type(exc).__name__}: {exc}", exc)
 
 
 run_button.on_click(_run_registration)
