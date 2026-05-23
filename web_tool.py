@@ -24,7 +24,7 @@ from bokeh.models import (
     TextInput,
 )
 
-from batch_run import _run_pair, _validate_wsi_path, _wsi_stem
+from batch_run import SUPPORTED_WSI_EXTENSIONS, _run_pair, _validate_wsi_path, _wsi_stem
 
 
 def _parse_float(value: str, label: str) -> float:
@@ -55,8 +55,9 @@ launch_info = Div(
 
 source_input = TextInput(title="Source WSI path (moving)", value="")
 target_input = TextInput(title="Target WSI path (fixed)", value="")
-source_upload = FileInput(title="Or load source WSI file", accept="")
-target_upload = FileInput(title="Or load target WSI file", accept="")
+_accepted_extensions = ",".join(SUPPORTED_WSI_EXTENSIONS)
+source_upload = FileInput(title="Or load source WSI file", accept=_accepted_extensions)
+target_upload = FileInput(title="Or load target WSI file", accept=_accepted_extensions)
 output_dir_input = TextInput(title="Output directory", value="./web_results")
 
 source_mag_input = TextInput(title="Source magnification", value="0.625")
@@ -100,7 +101,7 @@ def _resolve_input_path(
         try:
             upload_target.write_bytes(base64.b64decode(upload_value))
         except Exception as exc:  # noqa: BLE001
-            raise ValueError(f"Invalid uploaded {label} file content.") from exc
+            raise ValueError(f"Failed to decode uploaded {label} file content.") from exc
         return str(upload_target)
     return path_value.strip()
 
@@ -126,7 +127,9 @@ def _run_registration() -> None:
         )
 
         if not source_path or not target_path:
-            raise ValueError("Provide source and target paths, or upload both files using the buttons.")
+            raise ValueError(
+                "Please provide both source and target WSI paths or upload both files using the upload buttons."
+            )
 
         source_input.value = source_path
         target_input.value = target_path
