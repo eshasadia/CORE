@@ -28,6 +28,8 @@ from bokeh.models import (
 
 from batch_run import SUPPORTED_WSI_EXTENSIONS, _run_pair, _validate_wsi_path, _wsi_stem
 
+TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+
 
 def _parse_float(value: str, label: str) -> float:
     try:
@@ -100,7 +102,7 @@ def _resolve_input_path(
         upload_dir.mkdir(parents=True, exist_ok=True)
         upload_name = Path(upload_filename).name
         upload_target = upload_dir / (
-            f"{label}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S%f')}_{uuid4().hex[:8]}_{upload_name}"
+            f"{label}_{datetime.now(UTC).strftime(TIMESTAMP_FORMAT)}_{uuid4().hex[:8]}_{upload_name}"
         )
         try:
             upload_target.write_bytes(base64.b64decode(upload_value))
@@ -153,7 +155,7 @@ def _run_registration() -> None:
         visualise = 0 in preview_toggle.active
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S%f")
+        stamp = datetime.now(UTC).strftime(TIMESTAMP_FORMAT)
         run_id = uuid4().hex[:8]
         stem = _wsi_stem(source_path)
         run_prefix = f"{stem}_{stamp}_{run_id}"
