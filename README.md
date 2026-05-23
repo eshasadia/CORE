@@ -77,6 +77,28 @@ TARGET_WSI_PATH = "/path/to/your/target_wsi.tiff"
 ## Usage
 Example of both coarse and fine registration have been placed under the notebooks folder.
 
+### Web tool (on-the-fly WSI registration)
+You can run a browser-based single-pair registration tool powered by Bokeh:
+
+```bash
+bokeh serve --show web_tool.py
+```
+
+Direct local link after launch:
+- http://localhost:5006/web_tool
+
+Then provide:
+- source and target WSI inputs (you can use a path or upload button for each side)
+- output directory and registration parameters
+
+Note: both source and target must be provided before running (path+path, upload+upload, or mixed path/upload).
+If either source or target is missing, the app will show a validation error and not start registration.
+
+The tool runs CORE registration and writes:
+- combined deformation field (`.mha`)
+- registered whole-slide image (`.ome.tiff`)
+- optional checkerboard preview image
+
 ## How to Cite
 ```bibtex
 @misc{nasir2025corecelllevelcoarsetofine,
@@ -93,4 +115,3 @@ Example of both coarse and fine registration have been placed under the notebook
 
 ## CORE Registration DEMO
 <video src='https://github.com/user-attachments/assets/140e3c40-40e1-429f-a49b-1fd9ede790ff' width=180/>
-
