@@ -84,9 +84,11 @@ You can run a browser-based single-pair registration tool powered by Bokeh:
 bokeh serve --show web_tool.py
 ```
 
+Direct local link after launch:
+- http://localhost:5006/web_tool
+
 Then provide:
-- source WSI path (moving image)
-- target WSI path (fixed image)
+- source and target WSI paths, or load both files via the upload buttons
 - output directory and registration parameters
 
 The tool runs CORE registration and writes:

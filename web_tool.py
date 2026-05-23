@@ -14,7 +14,15 @@ from pathlib import Path
 
 from bokeh.io import curdoc
 from bokeh.layouts import column, row
-from bokeh.models import Button, CheckboxGroup, Div, PreText, Select, TextInput
+from bokeh.models import (
+    Button,
+    CheckboxGroup,
+    Div,
+    FileInput,
+    PreText,
+    Select,
+    TextInput,
+)
 
 from batch_run import _run_pair, _validate_wsi_path, _wsi_stem
 
@@ -37,9 +45,18 @@ def _parse_int(value: str, label: str) -> int:
 
 
 title = Div(text="<h2>CORE — On-the-fly WSI Registration</h2>")
+launch_info = Div(
+    text=(
+        "<p>Launch with: <code>bokeh serve --show web_tool.py</code></p>"
+        "<p>Open link: <a href='http://localhost:5006/web_tool' target='_blank'>"
+        "http://localhost:5006/web_tool</a></p>"
+    )
+)
 
 source_input = TextInput(title="Source WSI path (moving)", value="")
 target_input = TextInput(title="Target WSI path (fixed)", value="")
+source_upload = FileInput(title="Or load source WSI file", accept="")
+target_upload = FileInput(title="Or load target WSI file", accept="")
 output_dir_input = TextInput(title="Output directory", value="./web_results")
 
 source_mag_input = TextInput(title="Source magnification", value="0.625")
@@ -68,17 +85,52 @@ def _encode_image(image_path: Path) -> str:
     return encoded
 
 
+def _resolve_input_path(
+    label: str,
+    path_value: str,
+    upload_value: str | None,
+    upload_filename: str | None,
+    output_dir: Path,
+) -> str:
+    if upload_value and upload_filename:
+        upload_dir = output_dir / "_uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        upload_name = Path(upload_filename).name
+        upload_target = upload_dir / f"{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{label}_{upload_name}"
+        try:
+            upload_target.write_bytes(base64.b64decode(upload_value))
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError(f"Invalid uploaded {label} file content.") from exc
+        return str(upload_target)
+    return path_value.strip()
+
+
 def _run_registration() -> None:
-    source_path = source_input.value.strip()
-    target_path = target_input.value.strip()
     output_dir = Path(output_dir_input.value.strip() or "./web_results")
     preview.text = ""
 
-    if not source_path or not target_path:
-        _set_error("Both source and target WSI paths are required.")
-        return
-
     try:
+        source_path = _resolve_input_path(
+            label="source",
+            path_value=source_input.value,
+            upload_value=source_upload.value,
+            upload_filename=source_upload.filename,
+            output_dir=output_dir,
+        )
+        target_path = _resolve_input_path(
+            label="target",
+            path_value=target_input.value,
+            upload_value=target_upload.value,
+            upload_filename=target_upload.filename,
+            output_dir=output_dir,
+        )
+
+        if not source_path or not target_path:
+            raise ValueError("Provide source and target paths, or upload both files using the buttons.")
+
+        source_input.value = source_path
+        target_input.value = target_path
+
         if not Path(source_path).exists():
             raise FileNotFoundError(f"Source path not found: {source_path}")
         if not Path(target_path).exists():
@@ -142,8 +194,11 @@ run_button.on_click(_run_registration)
 
 layout = column(
     title,
+    launch_info,
     source_input,
+    source_upload,
     target_input,
+    target_upload,
     output_dir_input,
     row(source_mag_input, target_mag_input, tile_size_input),
     row(compression_select, preview_toggle),
