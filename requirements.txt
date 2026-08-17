@@ -1,23 +1,25 @@
+numpy>=1.21.0,<2.0
+pandas>=1.3.0,<2.0
+scipy>=1.7.0,<1.11
+matplotlib>=3.4.0,<3.8
 
-numpy>=1.21.0
-pandas>=1.3.0
-scipy>=1.7.0
-matplotlib>=3.4.0
+opencv-python>=4.5.0,<4.9
+scikit-image>=0.18.0,<0.22
+Pillow>=8.3.0,<11
+SimpleITK>=2.1.0,<2.4
+scikit-learn>=1.0.0,<1.4
 
-opencv-python>=4.5.0
-scikit-image>=0.18.0
-Pillow>=8.3.0
-SimpleITK>=2.1.0
-scikit-learn>=1.0.0
-torch>=1.9.0
-torchvision>=0.10.0
-open3d>=0.13.0
-pycpd>=2.0.0
-tiatoolbox>=1.4.0
-tqdm>=4.62.0
-pillow-heif>=0.10.0
+torch==2.1.2
+torchvision==0.16.2
+
+open3d>=0.13.0,<0.19
+pycpd==2.0.0
+tiatoolbox==1.4.1
+
+tqdm>=4.62.0,<5
+pillow-heif>=0.10.0,<0.16
 vision-agent>=0.2.0
-# Interactive visualization
-bokeh>=2.4.0
-jupyter>=1.0.0
-ipywidgets>=7.6.0
+
+bokeh>=2.4.0,<3
+jupyter>=1.0.0,<2
+ipywidgets>=7.6.0,<9
