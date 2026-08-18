@@ -41,6 +41,9 @@ CORE is a fast and accurate coarse-to-fine image registration engine designed fo
 - **Fine-grained Nuclei-level precise alignment on re-stained sections and tissue alignment on consecutive sections.**
 - **Real time deformation estimation and Registration visualisation.**
 
+# CORE: Cell-Level Coarse-to-Fine Image Registration
+
+[![Open In Colab](https://github.com/eshasadia/CORE/blob/main/notebooks/1-WSI_Registration.ipynb)
 ![CORE Architecture](https://github.com/user-attachments/assets/ffeca69d-e1b2-4260-bbd2-edf3fa28f76a)
 
 ## CORE VISUALIZATION
